@@ -189,12 +189,18 @@ None of these change the headline conclusion (a ~3% upside under the Bull case, 
 
 ## Data sources
 
-Every historical figure in this model traces back to a primary source. See **Cover** and **Validation** tabs for full footnotes.
+Every historical figure in this model traces back to a primary source filing. The filings themselves are archived in [`source_filings/`](./source_filings/) so any number in the model can be verified in one click.
 
-- Apple Inc. Form 10-K **FY2025** (filed Oct 31, 2025) — primary source for FY23A, FY24A, FY25A
-- Apple Inc. Form 10-K **FY2022** (filed Oct 28, 2022) — primary source for FY20A, FY21A, FY22A
-- Apple Inc. Form 10-K **FY2023** (filed Nov 3, 2023) — cross-verification for FY21A-FY23A
-- Apple FY25 Q4 Press Release (Oct 30, 2025) — consolidated statements PDF
+| File | Filing | Used for |
+|---|---|---|
+| [`10-K-FY2025.pdf`](./source_filings/10-K-FY2025.pdf) | Apple Inc. Form 10-K, FY2025 (filed Oct 31, 2025) | Primary source for FY23A, FY24A, FY25A — three-year comparative tables |
+| [`FY25_Q4_Consolidated_Financial_Statements.pdf`](./source_filings/FY25_Q4_Consolidated_Financial_Statements.pdf) | FY25 Q4 earnings release | Full-year FY25A press release statements |
+| [`FY24_Q4_Consolidated_Financial_Statements.pdf`](./source_filings/FY24_Q4_Consolidated_Financial_Statements.pdf) | FY24 Q4 earnings release | Full-year FY24A press release statements |
+| [`FY23_Q4_Consolidated_Financial_Statements.pdf`](./source_filings/FY23_Q4_Consolidated_Financial_Statements.pdf) | FY23 Q4 earnings release | Full-year FY23A press release statements; cross-check for FY22A comparatives |
+| [`FY26_Q1_Consolidated_Financial_Statements.pdf`](./source_filings/FY26_Q1_Consolidated_Financial_Statements.pdf) | FY26 Q1 earnings release | Post-forecast forward-looking sanity check against FY26E projections |
+
+For FY21A and FY22A historicals (outside the FY25 10-K comparative period), figures are cross-verified against SEC EDGAR's archive of Apple's earlier filings:
+
 - [SEC EDGAR Apple filings index](https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=0000320193)
 - [Apple Investor Relations](https://investor.apple.com/)
 
