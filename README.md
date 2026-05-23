@@ -1,26 +1,33 @@
-![Financial Analyst Portfolio](banner.svg)
+# Financial-Analyst
 
-<p align="center">
-  <img alt="Excel" src="https://img.shields.io/badge/Excel-217346?logo=microsoftexcel&logoColor=white">
-  <img alt="DCF" src="https://img.shields.io/badge/DCF-valuation-2E5C8A">
-  <img alt="Three-Statement" src="https://img.shields.io/badge/Three--Statement-model-1F4E79">
-  <img alt="Scenario" src="https://img.shields.io/badge/Scenario-analysis-5B7553">
-  <img alt="License" src="https://img.shields.io/badge/license-MIT-blue">
-</p>
+> Three-statement models, DCF valuations, and scenario analysis built from primary-source filings. Every historical line ties to the 10-K it came from.
 
----
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Excel](https://img.shields.io/badge/Excel-LibreOffice%20compatible-217346?logo=microsoftexcel&logoColor=white)](https://www.microsoft.com/en-us/microsoft-365/excel)
+[![No macros](https://img.shields.io/badge/macros-none-success)](#modelling-conventions)
+[![Models](https://img.shields.io/badge/models-1%20%C2%B7%20Apple-blue)](#current-models)
 
-## Overview
+![Financial-Analyst banner — primary-source three-statement models and DCF valuations](banner.svg)
 
-Company financial analyses built from primary-source filings: three-statement models, DCF valuations, scenario analysis. Each workbook ships with the filings it was sourced from, a validation tab that reconciles every historical line to its source, and a short write-up of the figures that matter.
+## Why?
+
+Most public financial models on the internet are detached from their source filings — figures appear without an audit trail, scenarios are toggled without traceability, and the balance sheet is left to drift. This repository publishes models where every historical line reconciles back to the 10-K, 10-Q, or press release it came from, and the workbook refuses to be treated as correct until a validation tab confirms structural integrity (balance-sheet identity, cash-flow ties, inter-statement consistency).
 
 I'm Alven, a CPA finalist (Kenya) awaiting ICPAK membership. This repository is where I publish modelling work as I build out the technical side of accounting and finance.
+
+## Features
+
+- 📑 **Primary-source sourcing** — every workbook ships alongside the filings it was built from
+- 🔍 **Validation tab** reconciles each historical line to its source and runs the balance-sheet identity, cash-flow ties, and inter-statement consistency checks
+- 🎚️ **Scenario toggles** — bear / base / bull, but only on questions where the answer changes materially across them
+- 🎨 **Colour-coded inputs**, locked calculated cells, single source of truth for assumptions
+- 📂 **No macros, no external feeds, no add-ins** — opens in Excel or LibreOffice Calc
 
 ## Current models
 
 | Company | Ticker | Status | Folder |
 |---|---|---|---|
-| Apple Inc. | AAPL | Complete | `Apple/` |
+| Apple Inc. | AAPL | ✅ Complete | [`Apple/`](Apple_Financial_Model.xlsx) |
 
 More to come.
 
@@ -32,11 +39,19 @@ A few conventions run through every analysis in this repository.
 
 **Every historical figure traces to its source.** Each workbook ships alongside the 10-K, 10-Q, and press releases the figures were taken from. The validation tab reconciles each historical line back to the filing it came from.
 
-**Structural integrity is enforced.** The validation tab runs the balance-sheet identity (assets = liabilities + equity), the cash flow ties (net income to retained earnings, depreciation to PPE), and inter-statement consistency checks. The workbook does not treat a model as correct until those checks pass.
+**Structural integrity is enforced.** The validation tab runs the balance-sheet identity (`assets = liabilities + equity`), the cash flow ties (net income → retained earnings, depreciation → PPE), and inter-statement consistency checks. The workbook does not treat a model as correct until those checks pass.
 
 **Scenario toggles where they help.** Bear, base, and bull scenarios are wired up on questions where the answer changes materially across them. Where it does not, the model stays single-case to keep the audit trail clean.
 
-Files open in Excel or LibreOffice Calc. No macros, no external data feeds, no add-ins.
+**Files open in Excel or LibreOffice Calc.** No macros, no external data feeds, no add-ins.
+
+## Tech Stack
+
+| Layer | Tools |
+|---|---|
+| Spreadsheet | Microsoft Excel (LibreOffice Calc compatible) |
+| Modelling | Native formulas only — no VBA, no add-ins |
+| Source filings | SEC EDGAR 10-K / 10-Q / press releases |
 
 ## Folder structure
 
@@ -44,19 +59,47 @@ Files open in Excel or LibreOffice Calc. No macros, no external data feeds, no a
 Financial-Analyst/
 ├── README.md
 ├── banner.svg
-└── Apple/                 Three-statement model, DCF, source filings, notes
+├── Apple_Financial_Model.xlsx     # three-statement model, DCF, scenario toggles
+└── Source_filings/                # 10-K, 10-Q, press releases backing the model
 ```
 
 Additional company analyses will follow this same structure.
 
-## Contact
+## Installation
 
-GitHub: [@alvenyuka](https://github.com/alvenyuka)  
-Email: alvenyuka2@gmail.com  
-Fiverr: alvenemmanuel
+```bash
+git clone https://github.com/alvenyuka/Financial-Analyst.git
+cd Financial-Analyst
+# Open Apple_Financial_Model.xlsx in Excel or LibreOffice Calc
+```
 
-If you spot an error in any model, open an issue. If you'd like work in this style on a company you care about, send a note.
+## Usage
+
+1. Open the model file in Excel or LibreOffice Calc.
+2. Review the assumptions tab (colour-coded inputs).
+3. Toggle scenarios where wired up.
+4. Confirm the **Validation** tab is fully green before trusting any output.
+5. Cross-check any historical line against the source filing in `Source_filings/`.
+
+## Roadmap
+
+- [x] Apple Inc. (AAPL) — three-statement model, DCF, validation harness
+- [ ] Microsoft (MSFT)
+- [ ] Safaricom (SCOM.NR) — Nairobi Securities Exchange
+- [ ] Equity Group Holdings (EQTY.NR)
+
+If you'd like a particular company modelled in this style, open an issue.
+
+## Contributing
+
+If you spot an error in any model, [open an issue](https://github.com/alvenyuka/Financial-Analyst/issues). Reproduction steps and the offending cell reference make a fix possible.
 
 ## License
 
-MIT.
+MIT — see [`LICENSE`](LICENSE).
+
+## Connect
+
+Built by **Alven Yuka** — CPA Finalist (Kenya), awaiting ICPAK membership.
+
+📫 [alvenyuka2@gmail.com](mailto:alvenyuka2@gmail.com) · 💼 [LinkedIn](https://www.linkedin.com/in/alvenyuka) · 🐙 [GitHub](https://github.com/alvenyuka) · 🛠️ Fiverr: `alvenemmanuel`
