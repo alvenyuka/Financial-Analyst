@@ -23,28 +23,6 @@ I'm Alven, a CPA finalist (Kenya) awaiting ICPAK membership. This repository is 
 - 🎨 **Colour-coded inputs**, locked calculated cells, single source of truth for assumptions
 - 📂 **No macros, no external feeds, no add-ins** — opens in Excel or LibreOffice Calc
 
-## Current models
-
-| Company | Ticker | Status | Folder |
-|---|---|---|---|
-| Apple Inc. | AAPL | ✅ Complete | [`Apple/`](Apple_Financial_Model.xlsx) |
-
-More to come.
-
-## Modelling conventions
-
-A few conventions run through every analysis in this repository.
-
-**One source of truth for inputs.** A dedicated tab holds assumptions and inputs. Every other tab recalculates from it. Inputs are colour-coded; calculated cells are locked.
-
-**Every historical figure traces to its source.** Each workbook ships alongside the 10-K, 10-Q, and press releases the figures were taken from. The validation tab reconciles each historical line back to the filing it came from.
-
-**Structural integrity is enforced.** The validation tab runs the balance-sheet identity (`assets = liabilities + equity`), the cash flow ties (net income → retained earnings, depreciation → PPE), and inter-statement consistency checks. The workbook does not treat a model as correct until those checks pass.
-
-**Scenario toggles where they help.** Bear, base, and bull scenarios are wired up on questions where the answer changes materially across them. Where it does not, the model stays single-case to keep the audit trail clean.
-
-**Files open in Excel or LibreOffice Calc.** No macros, no external data feeds, no add-ins.
-
 ## Tech Stack
 
 | Layer | Tools |
@@ -52,18 +30,6 @@ A few conventions run through every analysis in this repository.
 | Spreadsheet | Microsoft Excel (LibreOffice Calc compatible) |
 | Modelling | Native formulas only — no VBA, no add-ins |
 | Source filings | SEC EDGAR 10-K / 10-Q / press releases |
-
-## Folder structure
-
-```
-Financial-Analyst/
-├── README.md
-├── banner.svg
-├── Apple_Financial_Model.xlsx     # three-statement model, DCF, scenario toggles
-└── Source_filings/                # 10-K, 10-Q, press releases backing the model
-```
-
-Additional company analyses will follow this same structure.
 
 ## Installation
 
@@ -80,6 +46,48 @@ cd Financial-Analyst
 3. Toggle scenarios where wired up.
 4. Confirm the **Validation** tab is fully green before trusting any output.
 5. Cross-check any historical line against the source filing in `Source_filings/`.
+
+## Modelling conventions
+
+A few conventions run through every analysis in this repository.
+
+### One source of truth for inputs
+
+A dedicated tab holds assumptions and inputs. Every other tab recalculates from it. Inputs are colour-coded; calculated cells are locked.
+
+### Every historical figure traces to its source
+
+Each workbook ships alongside the 10-K, 10-Q, and press releases the figures were taken from. The validation tab reconciles each historical line back to the filing it came from.
+
+### Structural integrity is enforced
+
+The validation tab runs the balance-sheet identity (`assets = liabilities + equity`), the cash flow ties (net income → retained earnings, depreciation → PPE), and inter-statement consistency checks. The workbook does not treat a model as correct until those checks pass.
+
+### Scenario toggles only where they help
+
+Bear, base, and bull scenarios are wired up on questions where the answer changes materially across them. Where it does not, the model stays single-case to keep the audit trail clean.
+
+### Excel-native, no add-ins
+
+Files open in Excel or LibreOffice Calc. No macros, no external data feeds, no add-ins.
+
+## Repository structure
+
+```
+Financial-Analyst/
+├── README.md
+├── banner.svg
+├── Apple_Financial_Model.xlsx     # three-statement model, DCF, scenario toggles
+└── Source_filings/                # 10-K, 10-Q, press releases backing the model
+```
+
+## Current models
+
+| Company | Ticker | Status | Workbook |
+|---|---|---|---|
+| Apple Inc. | AAPL | ✅ Complete | [`Apple_Financial_Model.xlsx`](Apple_Financial_Model.xlsx) |
+
+Additional company analyses will follow the same structure.
 
 ## Roadmap
 
