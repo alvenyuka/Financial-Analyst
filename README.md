@@ -15,13 +15,32 @@ Most public financial models on the internet are detached from their source fili
 
 I'm Alven, a CPA finalist (Kenya) awaiting ICPAK membership. This repository is where I publish modelling work as I build out the technical side of accounting and finance.
 
+## Project Structure
+
+```
+Financial-Analyst/
+├── Apple_Financial_Model.xlsx     # Three-statement model, DCF, scenario toggles
+├── Source_filings/                # 10-K, 10-Q, press releases backing the model
+├── banner.svg
+├── LICENSE
+└── README.md
+```
+
+## Quick Start
+
+1. Clone the repo
+2. Open `Apple_Financial_Model.xlsx` in Excel or LibreOffice Calc
+3. Review the assumptions tab (colour-coded inputs)
+4. Confirm the **Validation** tab is fully green before trusting any output
+5. Cross-check any historical line against the source filing in `Source_filings/`
+
 ## Features
 
-- 📑 **Primary-source sourcing** — every workbook ships alongside the filings it was built from
-- 🔍 **Validation tab** reconciles each historical line to its source and runs the balance-sheet identity, cash-flow ties, and inter-statement consistency checks
-- 🎚️ **Scenario toggles** — bear / base / bull, but only on questions where the answer changes materially across them
-- 🎨 **Colour-coded inputs**, locked calculated cells, single source of truth for assumptions
-- 📂 **No macros, no external feeds, no add-ins** — opens in Excel or LibreOffice Calc
+- **Primary-source sourcing** — every workbook ships alongside the filings it was built from
+- **Validation tab** reconciles each historical line to its source and runs the balance-sheet identity, cash-flow ties, and inter-statement consistency checks
+- **Scenario toggles** — bear / base / bull, but only on questions where the answer changes materially across them
+- **Colour-coded inputs**, locked calculated cells, single source of truth for assumptions
+- **No macros, no external feeds, no add-ins** — opens in Excel or LibreOffice Calc
 
 ## Tech Stack
 
@@ -31,14 +50,6 @@ I'm Alven, a CPA finalist (Kenya) awaiting ICPAK membership. This repository is 
 | Modelling | Native formulas only — no VBA, no add-ins |
 | Source filings | SEC EDGAR 10-K / 10-Q / press releases |
 
-## Installation
-
-```bash
-git clone https://github.com/alvenyuka/Financial-Analyst.git
-cd Financial-Analyst
-# Open Apple_Financial_Model.xlsx in Excel or LibreOffice Calc
-```
-
 ## Usage
 
 1. Open the model file in Excel or LibreOffice Calc.
@@ -47,9 +58,7 @@ cd Financial-Analyst
 4. Confirm the **Validation** tab is fully green before trusting any output.
 5. Cross-check any historical line against the source filing in `Source_filings/`.
 
-## Modelling conventions
-
-A few conventions run through every analysis in this repository.
+## Modelling Conventions
 
 ### One source of truth for inputs
 
@@ -71,21 +80,11 @@ Bear, base, and bull scenarios are wired up on questions where the answer change
 
 Files open in Excel or LibreOffice Calc. No macros, no external data feeds, no add-ins.
 
-## Repository structure
-
-```
-Financial-Analyst/
-├── README.md
-├── banner.svg
-├── Apple_Financial_Model.xlsx     # three-statement model, DCF, scenario toggles
-└── Source_filings/                # 10-K, 10-Q, press releases backing the model
-```
-
-## Current models
+## Current Models
 
 | Company | Ticker | Status | Workbook |
 |---|---|---|---|
-| Apple Inc. | AAPL | ✅ Complete | [`Apple_Financial_Model.xlsx`](Apple_Financial_Model.xlsx) |
+| Apple Inc. | AAPL | Complete | [`Apple_Financial_Model.xlsx`](Apple_Financial_Model.xlsx) |
 
 Additional company analyses will follow the same structure.
 
@@ -106,8 +105,10 @@ If you spot an error in any model, [open an issue](https://github.com/alvenyuka/
 
 MIT — see [`LICENSE`](LICENSE).
 
-## Connect
+## Credits
 
 Built by **Alven Yuka** — CPA Finalist (Kenya), awaiting ICPAK membership.
 
-📫 [alvenyuka2@gmail.com](mailto:alvenyuka2@gmail.com) · 💼 [LinkedIn](https://www.linkedin.com/in/alvenyuka) · 🐙 [GitHub](https://github.com/alvenyuka) · 🛠️ Fiverr: `alvenemmanuel`
+## Connect
+
+[alvenyuka2@gmail.com](mailto:alvenyuka2@gmail.com) · [LinkedIn](https://www.linkedin.com/in/alven-yuka-610b78174/) · [GitHub](https://github.com/alvenyuka)
