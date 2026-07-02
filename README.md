@@ -1,114 +1,51 @@
 # Financial-Analyst
 
-> Three-statement models, DCF valuations, and scenario analysis built from primary-source filings. Every historical line ties to the 10-K it came from.
+> Company financial models built from primary-source SEC filings — three-statement models, DCF valuations, and a validation tab that ties every historical line back to the 10-K it came from.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Excel](https://img.shields.io/badge/Excel-LibreOffice%20compatible-217346?logo=microsoftexcel&logoColor=white)](https://www.microsoft.com/en-us/microsoft-365/excel)
-[![No macros](https://img.shields.io/badge/macros-none-success)](#modelling-conventions)
-[![Models](https://img.shields.io/badge/models-1%20%C2%B7%20Apple-blue)](#current-models)
+[![No macros](https://img.shields.io/badge/macros-none-success)](#how-i-build-these)
 
 ![Financial-Analyst banner — primary-source three-statement models and DCF valuations](banner.svg)
 
 ## Why?
 
-Most public financial models on the internet are detached from their source filings — figures appear without an audit trail, scenarios are toggled without traceability, and the balance sheet is left to drift. This repository publishes models where every historical line reconciles back to the 10-K, 10-Q, or press release it came from, and the workbook refuses to be treated as correct until a validation tab confirms structural integrity (balance-sheet identity, cash-flow ties, inter-statement consistency).
+Most public financial models are detached from their source filings — figures appear without an audit trail, scenarios are toggled without traceability. Every model in this repo ships with a validation tab that cross-references each historical line against the primary filing, checks the balance sheet balances to zero in every year (historical and projected), and ties the cash flow statement's ending cash to the next period's balance sheet.
 
-I'm Alven, a CPA finalist (Kenya) awaiting ICPAK membership. This repository is where I publish modelling work as I build out the technical side of accounting and finance.
+I'm Alven, a CPA Finalist (Kenya), awaiting ICPAK membership. This repo is where I publish the technical side of finance: modelling, valuation, scenario analysis, and the data discipline that makes any of it credible.
 
-## Project Structure
+## What's inside
 
-```
-Financial-Analyst/
-├── Apple_Financial_Model.xlsx     # Three-statement model, DCF, scenario toggles
-├── Source_filings/                # 10-K, 10-Q, press releases backing the model
-├── banner.svg
-├── LICENSE
-└── README.md
-```
+| Company | Status | Folder |
+|---|---|---|
+| Apple Inc. (AAPL) | Complete — 50/50 historical data points verified against 10-K, all structural checks pass | [`Apple/`](./Apple/) |
+| Microsoft (MSFT) | Planned | — |
+| Safaricom (SCOM.NR) — Nairobi Securities Exchange | Planned | — |
+| Equity Group Holdings (EQTY.NR) | Planned | — |
 
-## Quick Start
+Each project folder contains the workbook, the primary-source filings behind it, and a README describing the model's specific assumptions and results.
 
-1. Clone the repo
-2. Open `Apple_Financial_Model.xlsx` in Excel or LibreOffice Calc
-3. Review the assumptions tab (colour-coded inputs)
-4. Confirm the **Validation** tab is fully green before trusting any output
-5. Cross-check any historical line against the source filing in `Source_filings/`
+## How I build these
 
-## Features
+Same conventions across every analysis here:
 
-- **Primary-source sourcing** — every workbook ships alongside the filings it was built from
-- **Validation tab** reconciles each historical line to its source and runs the balance-sheet identity, cash-flow ties, and inter-statement consistency checks
-- **Scenario toggles** — bear / base / bull, but only on questions where the answer changes materially across them
-- **Colour-coded inputs**, locked calculated cells, single source of truth for assumptions
-- **No macros, no external feeds, no add-ins** — opens in Excel or LibreOffice Calc
-
-## Tech Stack
-
-| Layer | Tools |
-|---|---|
-| Spreadsheet | Microsoft Excel (LibreOffice Calc compatible) |
-| Modelling | Native formulas only — no VBA, no add-ins |
-| Source filings | SEC EDGAR 10-K / 10-Q / press releases |
-
-## Usage
-
-1. Open the model file in Excel or LibreOffice Calc.
-2. Review the assumptions tab (colour-coded inputs).
-3. Toggle scenarios where wired up.
-4. Confirm the **Validation** tab is fully green before trusting any output.
-5. Cross-check any historical line against the source filing in `Source_filings/`.
-
-## Modelling Conventions
-
-### One source of truth for inputs
-
-A dedicated tab holds assumptions and inputs. Every other tab recalculates from it. Inputs are colour-coded; calculated cells are locked.
-
-### Every historical figure traces to its source
-
-Each workbook ships alongside the 10-K, 10-Q, and press releases the figures were taken from. The validation tab reconciles each historical line back to the filing it came from.
-
-### Structural integrity is enforced
-
-The validation tab runs the balance-sheet identity (`assets = liabilities + equity`), the cash flow ties (net income → retained earnings, depreciation → PPE), and inter-statement consistency checks. The workbook does not treat a model as correct until those checks pass.
-
-### Scenario toggles only where they help
-
-Bear, base, and bull scenarios are wired up on questions where the answer changes materially across them. Where it does not, the model stays single-case to keep the audit trail clean.
-
-### Excel-native, no add-ins
+- One tab for inputs and assumptions. Every other tab recalculates from it — colour-coded inputs, locked calculated cells.
+- Every historical figure traces to a primary filing archived in the same folder as the model.
+- A validation tab ties each historical line back to the source and reports ✓ or ✗, plus structural checks: balance-sheet identity, cash-flow ties, inter-statement consistency.
+- Scenario / sensitivity toggles where the question benefits from them (e.g. WACC × terminal growth, revenue growth × operating margin).
 
 Files open in Excel or LibreOffice Calc. No macros, no external data feeds, no add-ins.
 
-## Current Models
-
-| Company | Ticker | Status | Workbook |
-|---|---|---|---|
-| Apple Inc. | AAPL | Complete | [`Apple_Financial_Model.xlsx`](Apple_Financial_Model.xlsx) |
-
-Additional company analyses will follow the same structure.
-
-## Roadmap
-
-- [x] Apple Inc. (AAPL) — three-statement model, DCF, validation harness
-- [ ] Microsoft (MSFT)
-- [ ] Safaricom (SCOM.NR) — Nairobi Securities Exchange
-- [ ] Equity Group Holdings (EQTY.NR)
-
-If you'd like a particular company modelled in this style, open an issue.
-
 ## Contributing
 
-If you spot an error in any model, [open an issue](https://github.com/alvenyuka/Financial-Analyst/issues). Reproduction steps and the offending cell reference make a fix possible.
+If you spot an error in any model, [open an issue](https://github.com/alvenyuka/Financial-Analyst/issues) with the offending cell reference.
 
 ## License
 
 MIT — see [`LICENSE`](LICENSE).
 
-## Credits
-
-Built by **Alven Yuka** — CPA Finalist (Kenya), awaiting ICPAK membership.
-
 ## Connect
 
-[alvenyuka2@gmail.com](mailto:alvenyuka2@gmail.com) · [LinkedIn](https://www.linkedin.com/in/alven-yuka-610b78174/) · [GitHub](https://github.com/alvenyuka)
+[alvenyuka2@gmail.com](mailto:alvenyuka2@gmail.com) · [LinkedIn](https://www.linkedin.com/in/alven-yuka-610b78174/) · [GitHub](https://github.com/alvenyuka) · Fiverr: alvenemmanuel
+
+If you'd like work in this style for your own company, [open an issue](https://github.com/alvenyuka/Financial-Analyst/issues) or send a note.
