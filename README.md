@@ -46,6 +46,6 @@ MIT — see [`LICENSE`](LICENSE).
 
 ## Connect
 
-[alvenyuka2@gmail.com](mailto:alvenyuka2@gmail.com) · [LinkedIn](https://www.linkedin.com/in/alven-yuka-610b78174/) · [GitHub](https://github.com/alvenyuka) · Fiverr: alvenemmanuel
+📫 [alvenyuka2@gmail.com](mailto:alvenyuka2@gmail.com) · 💼 [LinkedIn](https://www.linkedin.com/in/alven-yuka-610b78174/) · 🐙 [GitHub](https://github.com/alvenyuka)
 
 If you'd like work in this style for your own company, [open an issue](https://github.com/alvenyuka/Financial-Analyst/issues) or send a note.
