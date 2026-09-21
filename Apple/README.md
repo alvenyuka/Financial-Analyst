@@ -60,7 +60,7 @@ The Assumptions tab holds every driver. Every other tab recalculates from it. In
 
 ### Every historical figure traces to its source
 
-The model ships alongside the 10-Ks and press releases the figures were taken from, in `Source_filings/`. The Validation tab reconciles each historical line back to the filing it came from, down to the page number.
+The filings behind FY23 onward ship alongside the model in `Source_filings/`; FY21 and FY22 cite the FY2022 and FY2023 10-Ks, linked to SEC EDGAR on the Validation tab. The Validation tab reconciles each historical line back to the filing it came from, down to the page number.
 
 ### Structural integrity is enforced
 

@@ -37,7 +37,7 @@ Each company gets its own folder with the workbook, the primary-source filings b
 ## Features
 
 - **Single source of truth for inputs.** One Assumptions tab per model; every other tab recalculates from it. Inputs are colour-coded, calculated cells are locked.
-- **Every historical figure traces to a primary filing** archived in the same folder as the model, down to the page number.
+- **Every historical figure traces to a primary filing**, cited down to the page number. FY23 onward is archived in `Apple/Source_filings/`; the FY21 and FY22 figures cite the FY2022 and FY2023 10-Ks, which are linked to SEC EDGAR rather than archived here.
 - **A validation tab reports ✓ or ✗ per line**, plus structural checks: balance-sheet identity, cash-flow ties, inter-statement consistency, forecast sanity bands.
 - **Scenario / sensitivity toggles** where the question benefits from them (e.g. WACC × terminal growth, revenue growth × operating margin).
 - **Excel-native.** No macros, no external data feeds, no add-ins. Opens in Excel or LibreOffice Calc.
