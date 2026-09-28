@@ -6,6 +6,7 @@
 [![Excel](https://img.shields.io/badge/Excel-LibreOffice%20compatible-217346?logo=microsoftexcel&logoColor=white)](https://www.microsoft.com/en-us/microsoft-365/excel)
 [![No macros](https://img.shields.io/badge/macros-none-success)](#how-i-build-these)
 [![Validation](https://img.shields.io/badge/validation-50%2F50%20data%20points-success)](#portfolio-snapshot)
+[![models validated](https://github.com/alvenyuka/Financial-Analyst/actions/workflows/ci.yml/badge.svg)](https://github.com/alvenyuka/Financial-Analyst/actions/workflows/ci.yml)
 
 ![Financial-Analyst banner: primary-source three-statement models and DCF valuations](banner.svg)
 
@@ -21,6 +22,11 @@ Financial-Analyst/
 │   ├── Apple_Financial_Model.xlsx
 │   ├── Source_filings/            # 10-K, 10-Q, press releases behind the model
 │   └── README.md                  # Model-specific tabs, validation results, DCF summary
+├── validate_model.py               # Re-derives every identity outside the spreadsheet
+├── tests/
+│   └── test_validate_model.py      # Breaks a copy of the model, checks each fault is caught
+├── .github/workflows/ci.yml        # Runs that validator on every push
+├── requirements.txt                # openpyxl, for the validator only
 ├── banner.svg
 ├── LICENSE
 └── README.md                      # This file, repo-wide conventions
@@ -32,7 +38,8 @@ Each company gets its own folder with the workbook, the primary-source filings b
 
 1. Open [`Apple/`](./Apple/), the one complete model, and follow its own Quick Start.
 2. In short: open `Apple_Financial_Model.xlsx` in Excel or LibreOffice Calc, start on the **Dashboard** tab, then confirm the **Validation** tab is fully green before trusting any output.
-3. Cross-check any historical line against the source filing in `Apple/Source_filings/`.
+3. Or check it without opening Excel at all: `pip install -r requirements.txt && python validate_model.py` re-derives every total independently. See [Checking it yourself](#checking-it-yourself).
+4. Cross-check any historical line against the source filing in `Apple/Source_filings/`.
 
 ## Features
 
@@ -68,6 +75,52 @@ Every model in this repo follows the same tab layout. [`Apple/Apple_Financial_Mo
 ## Validation Harness
 
 Each validation tab cross-references every hardcoded historical figure against the company's own SEC filings and press releases, checks the balance sheet balances to zero in every year (historical and projected), ties cash-flow ending cash to the next period's balance sheet, and confirms net income and D&A match between the CFS and IS. Forecast years are additionally checked against pre-defined plausibility bands (revenue growth, margins, tax rate, CapEx %, liquidity) so a projection can't silently drift outside a defensible range.
+
+## Checking it yourself
+
+The Validation tab says "ALL CHECKS PASS". That tick is computed by the same
+spreadsheet whose correctness is in question, so it is worth exactly as much as
+the formulas behind it. `validate_model.py` exists so you do not have to take it
+on trust:
+
+```bash
+pip install -r requirements.txt
+python validate_model.py                       # defaults to the Apple model
+python validate_model.py path/to/Model.xlsx    # any model with a Validation tab
+```
+
+This runs in CI on every push, which is possible here and not in the modelling
+repos: the workbook is committed, it is a few hundred kilobytes, and the checks
+are arithmetic rather than training, so there is no dataset to fetch and nothing
+to fit.
+
+**The validator is itself tested**, which matters more than it might sound. A
+script that has only ever been run against a correct workbook proves nothing: it
+would report "all checks pass" just as confidently if its comparisons were
+inverted or it were reading the wrong rows. So `tests/` copies the real model,
+breaks one specific thing, and asserts that specific thing is caught. Nine tests
+cover a total that no longer adds up, a rounding difference that must still pass,
+a duplicate row label, statements laid out over different years, a missing
+Validation tab and a missing file. CI runs those first and the real model second.
+
+It reads only the raw line items, adds them up in Python, and compares its own
+arithmetic against the totals the workbook reports. It never reads a cell whose
+value is a checkmark. Nineteen identities are re-derived this way: the income
+statement from segment revenue down to net income, both sides of the balance
+sheet ending in assets minus liabilities minus equity, the cash flow statement's
+three sections and its roll-forward, and the cross-statement tie from one year's
+ending cash to the next year's opening cash. It exits non-zero if any of them
+break, so it can run in CI.
+
+**Current result on the Apple model: 19 of 19 identities match**, plus one
+advisory flag. The advisory is that the cash flow statement's ending cash exceeds
+the balance sheet's cash line by roughly $0.8B to $1.3B in FY21 through FY23,
+while FY24 and FY25 agree exactly. Apple's cash flow statement historically
+reconciled to "cash, cash equivalents and restricted cash" where the balance
+sheet line excludes restricted cash, so this is most likely the model faithfully
+reproducing each filing's own presentation rather than an error. It is reported
+rather than suppressed because "most likely" is not "checked", and it does not
+affect the roll-forward tie this repo actually claims, which passes in every year.
 
 ## Portfolio Snapshot
 

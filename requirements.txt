@@ -1,0 +1,15 @@
+# Financial-Analyst
+#
+# The models themselves are Excel workbooks with no macros and no add-ins, so
+# nothing here is needed to open or use them. This file exists for one script:
+# validate_model.py, which re-derives every accounting identity in a workbook
+# outside the spreadsheet, so the Validation tab's own tick marks can be checked
+# rather than trusted.
+
+openpyxl>=3.1      # reads the .xlsx; data_only=True gives cached formula results
+
+# Testing
+# The validator is itself tested, by breaking a copy of the model on purpose and
+# confirming each fault is caught. A validator only ever run against a correct
+# workbook proves nothing.
+pytest>=8.0
