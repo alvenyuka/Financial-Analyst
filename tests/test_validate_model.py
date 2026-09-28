@@ -7,7 +7,7 @@ only way to know it works is to hand it a workbook that is wrong and confirm it
 says so.
 
 So each test copies the real Apple model, breaks one specific thing, and asserts
-the validator catches that thing. Three failure modes are covered:
+the validator catches that thing. Four failure modes are covered:
 
 * **Arithmetic that does not add up.** The case the script exists for.
 * **A duplicate row label.** The validator keys rows by their label. Two rows
@@ -15,10 +15,14 @@ the validator catches that thing. Three failure modes are covered:
   report a pass for a row nobody chose, which is worse than not checking.
 * **Statements laid out over different years.** Comparisons line up by position,
   so mismatched headers would compare FY21 against FY20 and call it agreement.
+* **A Validation figure that no longer matches its source statement.** The
+  validator reads the Validation tab, which is a transcription. Until the
+  transcription checks existed, wiping every numeric cell on the IS and BS still
+  produced "19 of 19 matched" and exit 0.
 
-The last two are structural. They hold in the Apple model today, but the script
-is documented as working on any workbook with a Validation tab, so they are
-properties to enforce rather than facts to rely on.
+The duplicate-label and year-header cases are structural. They hold in the Apple
+model today, but the script is documented as working on any workbook with a
+Validation tab, so they are properties to enforce rather than facts to rely on.
 """
 import os
 import shutil
@@ -29,6 +33,8 @@ from pathlib import Path
 
 import openpyxl
 import pytest
+
+import xlsx_surgery
 
 REPO = Path(__file__).resolve().parent.parent
 MODEL = REPO / "Apple" / "Apple_Financial_Model.xlsx"
@@ -66,12 +72,30 @@ def workbook_copy(tmp_path):
 
 
 def _edit(path: Path, edits):
+    """Structural edits, through openpyxl.
+
+    Saving with openpyxl discards every cached formula result in the file, so
+    this can only be used for tests whose expected failure is raised before the
+    transcription checks read IS, BS and CFS. Use `_set_number` for anything
+    that has to leave the rest of the workbook readable.
+    """
     wb = openpyxl.load_workbook(path)
     ws = wb["Validation"]
     for (row, col), value in edits.items():
         ws.cell(row, col).value = value
     wb.save(path)
     wb.close()
+
+
+def _set_number(path: Path, row: int, col: int, value):
+    """Change one number on the Validation tab and nothing else.
+
+    The validator now reads IS, BS and CFS as well, and those are formula cells
+    whose values only exist in the file as cached results. openpyxl would drop
+    all of them on save, so every transcription check would fail with "missing
+    value" and the test would be measuring the save, not the fault.
+    """
+    xlsx_surgery.set_cached_value(path, "Validation", xlsx_surgery.ref(row, col), value)
 
 
 # --------------------------------------------------------------------------
@@ -104,7 +128,7 @@ def test_broken_total_is_caught(workbook_copy):
     """Change total revenue so it no longer equals its two segments. The
     validator must fail, and must fail loudly enough to exit non-zero."""
     wb = workbook_copy()
-    _edit(wb, {(ROW_TOTAL_REVENUE, 2): 1})
+    _set_number(wb, ROW_TOTAL_REVENUE, 2, 1)
     code, out = _run(wb)
     assert code == 1, out
     assert "FAIL" in out
@@ -115,7 +139,7 @@ def test_failure_names_the_year_and_the_gap(workbook_copy):
     """A failure that does not say which year and by how much sends the reader
     back to the spreadsheet to find it themselves."""
     wb = workbook_copy()
-    _edit(wb, {(ROW_TOTAL_REVENUE, 2): 1})
+    _set_number(wb, ROW_TOTAL_REVENUE, 2, 1)
     _, out = _run(wb)
     assert "FY21A" in out
     assert "differs by" in out
@@ -127,7 +151,7 @@ def test_a_small_rounding_difference_still_passes(workbook_copy):
     deliberate, and it has to actually be there."""
     wb = workbook_copy()
     original = openpyxl.load_workbook(MODEL, data_only=True)["Validation"].cell(ROW_TOTAL_REVENUE, 2).value
-    _edit(wb, {(ROW_TOTAL_REVENUE, 2): original + 0.4})
+    _set_number(wb, ROW_TOTAL_REVENUE, 2, original + 0.4)
     code, out = _run(wb)
     assert code == 0, out
 
@@ -152,6 +176,25 @@ def test_duplicate_row_label_is_rejected(workbook_copy):
     code, out = _run(wb)
     assert code == 1, out
     assert "Duplicate numeric row labels" in out
+
+
+def test_a_statement_that_no_longer_matches_the_transcription_is_caught(workbook_copy):
+    """The gap this validator had until the transcription checks existed.
+
+    Every identity it checks is computed from the Validation tab, which is a
+    copy of the statements. Change the statement and leave the copy alone and
+    all of them still pass, because none of them ever opened the statement.
+    Here FY21A revenue on the IS is changed and nothing on the Validation tab
+    is, so every identity still holds and the run must still fail.
+    """
+    wb = workbook_copy()
+    xlsx_surgery.set_cached_value(wb, "IS", "B8", 1)
+    code, out = _run(wb)
+    assert code == 1, out
+    assert "SRC Products revenue" in out
+    assert "19 of 19 accounting identities" in out, (
+        "the identities are expected to still pass; that is the point of the test"
+    )
 
 
 def test_mismatched_year_headers_are_rejected(workbook_copy):

@@ -6,9 +6,23 @@ correctness is in question. A formula that is wrong reports a tick just as
 confidently as one that is right, so a reader has no way to distinguish the two
 without recomputing the arithmetic outside the file.
 
-This does that. It reads only the raw line items from the Validation tab, adds
-them up in Python, and compares the result against the totals the workbook
-reports. Nothing here reads a cell whose value is a checkmark.
+This does that. It adds the raw line items up in Python and compares the result
+against the totals the workbook reports. Nothing here reads a cell whose value
+is a checkmark.
+
+Scope, stated up front because an earlier version of this file overstated it.
+The line items live on the Validation tab, which is a second transcription of
+the statements rather than the statements themselves. Re-deriving the identities
+there proves the transcription is internally consistent and proves nothing about
+`IS`, `BS` or `CFS`. That gap was real: with every numeric cell on the IS and BS
+replaced by the number 1, this script still printed "19 of 19 ... matched" and
+exited 0. The transcription checks added below close it, by reading the source
+sheets directly and comparing them to the Validation tab, row by row and year by
+year. Both families must pass for the run to succeed.
+
+Still out of scope, so that nobody reads a green run as more than it is: the
+`DCF`, `Ratios`, `Assumptions`, `Dashboard` and `Pivots` tabs are not checked at
+all. The valuation is not validated by anything here.
 
 What it checks:
 
@@ -24,6 +38,12 @@ What it checks:
   The cash flow statement's ending cash has to equal the balance sheet's cash for
   the same year, and it has to equal the next year's beginning cash. A model can
   satisfy every within-statement check and still fail these.
+* **Transcription**, one check per Validation row, five years each: the figure on
+  the Validation tab against the cell or cells it was copied from on `IS`, `BS`
+  or `CFS`. The source cells are read out of the Validation tab's own column G
+  formulas, so the mapping comes from the workbook and the comparison is done
+  here. Without this, every identity above could pass on a workbook whose
+  statements had been emptied.
 
 Usage:
 
@@ -34,6 +54,7 @@ Exits 0 when every check passes, 1 otherwise, so it can run in CI.
 """
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 
@@ -257,6 +278,126 @@ def build_checks(rows, years):
     return checks
 
 
+# The Validation tab's column G holds, for each line item, a formula comparing
+# that row against the sheet it was transcribed from. Two shapes are used:
+#
+#   =IF(SUMPRODUCT(ABS(B16:F16-IS!B8:F8))<1, ...)                 range form
+#   =IF((ABS(B36-(BS!C5))+ABS(C36-(BS!D5))+...)<5, ...)           per-cell form
+#
+# Only the cell references are taken from them. The comparison itself is redone
+# here in Python, so a broken formula in column G cannot hide a broken figure.
+_RANGE_LINK = re.compile(
+    r"ABS\((?P<vcol>[A-Z]+)(?P<vrow>\d+):[A-Z]+\d+"
+    r"\s*-\s*(?P<sheet>[A-Za-z][A-Za-z0-9_ ]*)!(?P<scol>[A-Z]+)(?P<srow>\d+):[A-Z]+\d+\)"
+)
+_CELL_LINK = re.compile(
+    r"ABS\((?P<vref>[A-Z]+\d+)\s*-\s*\(?(?P<src>[A-Za-z][A-Za-z0-9_ ]*![A-Z]+\d+"
+    r"(?:\s*\+\s*[A-Za-z][A-Za-z0-9_ ]*![A-Z]+\d+)*)\)?\)"
+)
+_SHEET_CELL = re.compile(r"(?P<sheet>[A-Za-z][A-Za-z0-9_ ]*)!(?P<col>[A-Z]+)(?P<row>\d+)")
+
+
+def _col_index(letters: str) -> int:
+    n = 0
+    for ch in letters:
+        n = n * 26 + (ord(ch) - 64)
+    return n
+
+
+def _formula_text(value) -> str | None:
+    """Column G holds plain strings for some rows and ArrayFormula objects for
+    others. Both carry the formula; only the attribute differs."""
+    if isinstance(value, str):
+        return value if value.startswith("=") else None
+    text = getattr(value, "text", None)
+    return text if isinstance(text, str) and text.startswith("=") else None
+
+
+def read_source_links(ws_formulas, n_years=5):
+    """Map each Validation row to the source cells it was transcribed from.
+
+    Returns {row: (label, [(validation_cell, [(sheet, row, col), ...]), ...])},
+    one entry per year column. Rows whose column G compares a source sheet to
+    itself, such as the BALANCE CHECK row, carry no Validation-tab operand and
+    are skipped: there is no transcription to check there.
+    """
+    links = {}
+    for r in range(1, ws_formulas.max_row + 1):
+        formula = _formula_text(ws_formulas.cell(r, 7).value)
+        if not formula:
+            continue
+        label = ws_formulas.cell(r, 1).value
+        if not isinstance(label, str):
+            continue
+
+        per_year = []
+        match = _RANGE_LINK.search(formula)
+        if match and int(match.group("vrow")) == r:
+            vcol, scol = _col_index(match.group("vcol")), _col_index(match.group("scol"))
+            sheet, srow = match.group("sheet"), int(match.group("srow"))
+            for offset in range(n_years):
+                per_year.append(((r, vcol + offset), [(sheet, srow, scol + offset)]))
+        else:
+            seen = set()
+            for cell_match in _CELL_LINK.finditer(formula):
+                vref = cell_match.group("vref")
+                if vref in seen:
+                    continue  # the TEXT() fallback repeats every term
+                seen.add(vref)
+                vsplit = re.match(r"([A-Z]+)(\d+)", vref)
+                if int(vsplit.group(2)) != r:
+                    continue
+                sources = [
+                    (m.group("sheet"), int(m.group("row")), _col_index(m.group("col")))
+                    for m in _SHEET_CELL.finditer(cell_match.group("src"))
+                ]
+                per_year.append(((r, _col_index(vsplit.group(1))), sources))
+
+        if len(per_year) == n_years:
+            links[r] = (label.strip(), per_year)
+    return links
+
+
+def build_transcription_checks(wb_values, links, years):
+    """One check per Validation row: the transcribed figure against its source.
+
+    This is the part that actually opens IS, BS and CFS. Everything else in this
+    script works off the Validation tab's own copy of the numbers.
+    """
+    validation = wb_values["Validation"]
+    checks = []
+
+    for _, (label, per_year) in sorted(links.items()):
+        transcribed, derived = [], []
+        for (vrow, vcol), sources in per_year:
+            value = validation.cell(vrow, vcol).value
+            transcribed.append(value if isinstance(value, (int, float)) else None)
+
+            total = 0.0
+            for sheet, srow, scol in sources:
+                if sheet not in wb_values.sheetnames:
+                    total = None
+                    break
+                cell = wb_values[sheet].cell(srow, scol).value
+                if not isinstance(cell, (int, float)):
+                    total = None
+                    break
+                total += cell
+            derived.append(total)
+
+        sheets = sorted({sheet for _, sources in per_year for sheet, _, _ in sources})
+        checks.append(
+            Check(f"SRC {label} = {'/'.join(sheets)}", derived, transcribed, years,
+                  note=(
+                      "The Validation tab is a transcription of the statements, not "
+                      "the statements. A difference here means the figure being "
+                      "checked by every identity above is not the figure on the "
+                      "statement it came from."
+                  ))
+        )
+    return checks
+
+
 def main(argv):
     path = Path(argv[1]) if len(argv) > 1 else DEFAULT_MODEL
     if not path.exists():
@@ -276,12 +417,23 @@ def main(argv):
     )
     rows = read_rows(ws)
 
+    # A second load, formulas rather than values, purely to read the source-cell
+    # mapping out of the Validation tab's column G.
+    wb_formulas = openpyxl.load_workbook(path, data_only=False)
+    links = read_source_links(wb_formulas["Validation"])
+    if not links:
+        sys.exit(
+            "No source links found in the Validation tab's column G. Without them "
+            "this script can only check the transcription against itself, which is "
+            "the failure mode it exists to avoid. Refusing to report a pass."
+        )
+
     print(f"Model:  {path.name}")
     print(f"Years:  {', '.join(str(y) for y in years)}")
     print(f"Tolerance: {TOLERANCE:,.0f} (millions USD, for the workbook's rounding)")
     print("-" * 72)
 
-    checks = build_checks(rows, years)
+    checks = build_checks(rows, years) + build_transcription_checks(wb, links, years)
     failed = 0
     for check in checks:
         if check.passed:
@@ -301,10 +453,17 @@ def main(argv):
 
     hard = [c for c in checks if not c.advisory]
     notes = [c for c in checks if c.advisory and not c.passed]
+    identities = [c for c in hard if not c.label.startswith("SRC ")]
+    sources = [c for c in hard if c.label.startswith("SRC ")]
+    identity_failures = sum(1 for c in identities if not c.passed)
+    source_failures = sum(1 for c in sources if not c.passed)
 
     print("-" * 72)
-    print(f"{len(hard) - failed} of {len(hard)} accounting identities re-derived "
-          f"independently and matched.")
+    print(f"{len(identities) - identity_failures} of {len(identities)} accounting "
+          f"identities re-derived independently and matched.")
+    print(f"{len(sources) - source_failures} of {len(sources)} Validation-tab line "
+          f"items match the IS / BS / CFS cells they were transcribed from, "
+          f"across {len(years)} years each.")
     if notes:
         print(f"{len(notes)} advisory check(s) flagged above: a presentation "
               f"question, not arithmetic. See the note under each.")
@@ -312,7 +471,10 @@ def main(argv):
         print(f"{failed} FAILED. These are arithmetic, and the workbook's own "
               f"Validation tab reports a tick for them anyway.")
         return 1
-    print("Every total was recomputed outside the spreadsheet and agrees.")
+    print("Every total was recomputed outside the spreadsheet and agrees, and "
+          "every line item traces to the statement it came from.")
+    print("Not covered: the DCF, Ratios, Assumptions and Dashboard tabs. Nothing "
+          "here validates the valuation.")
     return 0
 
 
