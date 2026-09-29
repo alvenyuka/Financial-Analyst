@@ -29,6 +29,8 @@ On the Apple Inc. model (fiscal years 2021 to 2025):
 | DCF implied share price vs reference price, at the model's WACC of 7.79% and terminal growth of 3.0% | $240.05 vs $232.50 |
 | The same model at WACC 8.5% and terminal growth 2.5% | $205.92 |
 
+![Validation tab: each historical income-statement line for FY21 to FY25 ticked against the 10-K page it came from](images/apple_validation.png)
+
 - **The accounting holds.** Every total the workbook reports agrees with an independent recalculation, and
   every validation line matches its source statement.
 - **The valuation call depends on two assumptions.** Moving WACC from 7.79% to 8.5% and terminal growth from
@@ -50,6 +52,8 @@ fixed.
    releases, each cited to a page in the Validation tab.
 3. **Three statements and a DCF**: unlevered free cash flow, WACC discounting, Gordon Growth terminal value,
    and sensitivity tables.
+   ![Apple income statement, FY2021 actuals to FY2029 forecast, with inputs in blue](images/apple_income_statement.png)
+
 4. **An independent validator** (`validate_model.py`) adds the line items up in Python and compares them with
    the workbook's totals. Its own tests break a copy of the model on purpose and confirm each fault is caught.
    It runs on every push.
