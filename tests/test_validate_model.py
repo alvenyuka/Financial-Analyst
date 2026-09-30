@@ -225,3 +225,36 @@ def test_missing_file_is_reported_clearly(tmp_path):
     code, out = _run(tmp_path / "does_not_exist.xlsx")
     assert code != 0
     assert "workbook not found" in out
+
+
+def test_a_terminal_value_discounted_one_period_too_many_is_caught(workbook_copy):
+    """The defect the DCF used to carry: the Gordon value is as at the end of year 4,
+    so discounting it five periods understates enterprise value."""
+    wb = workbook_copy()
+    xlsx_surgery.set_cached_value(wb, "DCF", "B21", 1454766.0)
+    code, out = _run(wb)
+    assert code == 1, out
+    assert "FAIL  DCF terminal value, discounted from the end of year 4" in out
+
+
+def test_a_wrong_implied_price_is_caught(workbook_copy):
+    wb = workbook_copy()
+    xlsx_surgery.set_cached_value(wb, "DCF", "B26", 240.05)
+    code, out = _run(wb)
+    assert code == 1, out
+    assert "FAIL  DCF implied share price" in out
+
+
+def test_undiscounted_multiples_are_caught(workbook_copy):
+    """The P/E bar used to apply a multiple to FY29 earnings without discounting."""
+    wb = workbook_copy()
+    xlsx_surgery.set_cached_value(wb, "DCF", "C69", 345.25)
+    code, out = _run(wb)
+    assert code == 1, out
+    assert "P/E bar" in out
+
+
+def test_the_run_reports_the_reverse_dcf(workbook_copy):
+    code, out = _run(workbook_copy())
+    assert code == 0, out
+    assert "implies a WACC of" in out

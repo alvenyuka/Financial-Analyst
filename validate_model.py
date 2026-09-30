@@ -20,9 +20,12 @@ exited 0. The transcription checks added below close it, by reading the source
 sheets directly and comparing them to the Validation tab, row by row and year by
 year. Both families must pass for the run to succeed.
 
-Still out of scope, so that nobody reads a green run as more than it is: the
-`DCF`, `Ratios`, `Assumptions`, `Dashboard` and `Pivots` tabs are not checked at
-all. The valuation is not validated by anything here.
+The valuation is checked too: the DCF is rebuilt from the forecast statements and
+the Assumptions inputs (WACC, free cash flow, present values, terminal value at the
+end of year 4, enterprise and equity value, the per-share price and upside), along
+with the sensitivity grid's centre and corners and the discounted multiples. Still
+out of scope: the `Ratios`, `Dashboard` and `Pivots` tabs, and the Bear / Base /
+Bull row of the football field, which is a recorded snapshot rather than a formula.
 
 What it checks:
 
@@ -88,8 +91,9 @@ class Check:
     """One identity, evaluated for every year in the model."""
 
     def __init__(self, label: str, expected, actual, years, note: str | None = None,
-                 advisory: bool = False):
+                 advisory: bool = False, tol: float = TOLERANCE):
         self.label = label
+        self.tol = tol
         self.expected = expected
         self.actual = actual
         self.years = years
@@ -108,7 +112,7 @@ class Check:
         for year, exp, act in zip(self.years, self.expected, self.actual):
             if exp is None or act is None:
                 out.append((year, exp, act, "missing value"))
-            elif abs(exp - act) > TOLERANCE:
+            elif abs(exp - act) > self.tol:
                 out.append((year, exp, act, f"differs by {exp - act:,.1f}"))
         return out
 
@@ -398,6 +402,66 @@ def build_transcription_checks(wb_values, links, years):
     return checks
 
 
+def _dcf_price(fcf, wacc, g, net_cash, shares):
+    """Per-share value: four years of free cash flow plus a Gordon terminal value at year 4."""
+    pv = sum(f / (1 + wacc) ** t for t, f in enumerate(fcf, start=1))
+    tv = fcf[-1] * (1 + g) / (wacc - g) / (1 + wacc) ** len(fcf)
+    return (pv + tv + net_cash) / shares
+
+
+def build_dcf_checks(wb):
+    """Rebuild the DCF tab from the forecast statements and the Assumptions inputs."""
+    IS, BS, CFS = wb["IS"], wb["BS"], wb["CFS"]
+    A, D = wb["Assumptions"], wb["DCF"]
+    v = lambda ws, ref: ws[ref].value  # noqa: E731
+    cols = "GHIJ"                      # FY2026E to FY2029E on the statements
+    tax = v(A, "B50")
+    ke = v(A, "B45") + v(A, "B47") * v(A, "B46")
+    wacc = ke * (1 - v(A, "B52")) + v(A, "B49") * (1 - tax) * v(A, "B52")
+    g = v(A, "B55")
+    fcf = [v(IS, f"{c}28") * (1 - tax) + v(CFS, f"{c}10") + v(CFS, f"{c}19") + v(CFS, f"{c}13") for c in cols]
+    pv = sum(f / (1 + wacc) ** t for t, f in enumerate(fcf, start=1))
+    tv_pv = fcf[-1] * (1 + g) / (wacc - g) / (1 + wacc) ** 4
+    net_cash = v(BS, "F5") + v(BS, "F6") + v(BS, "F15") - v(BS, "F42")
+    shares, price_ref = v(A, "B58"), v(A, "B59")
+    price = (pv + tv_pv + net_cash) / shares
+    df4 = 1 / (1 + wacc) ** 4
+    ebitda = v(IS, "J28") + v(CFS, "J10")
+
+    def one(label, derived, cell, tol=TOLERANCE, sheet=D):
+        return Check(f"DCF {label}", [derived], [v(sheet, cell)], ["DCF"], tol=tol)
+
+    checks = [
+        one("WACC = cost of equity x E/V + after-tax cost of debt x D/V", wacc, "B54", tol=1e-9, sheet=A),
+        *[one(f"unlevered free cash flow {y} = NOPAT + D&A - CapEx - change in WC", f, f"{c}13")
+          for y, f, c in zip(("FY26E", "FY27E", "FY28E", "FY29E"), fcf, "BCDE")],
+        one("sum of discounted forecast cash flows", pv, "B20"),
+        one("terminal value, discounted from the end of year 4", tv_pv, "B21"),
+        one("enterprise value", pv + tv_pv, "B22"),
+        one("net cash (FY25) = cash + marketable securities - total debt", net_cash, "B23"),
+        one("implied share price", price, "B26", tol=0.01),
+        one("upside = implied price / reference price - 1", price / price_ref - 1, "B28", tol=1e-6),
+        one("sensitivity grid centre equals the headline price", price, "D36", tol=0.01),
+        one("grid corner, WACC +50 bps and g -50 bps",
+            _dcf_price(fcf, wacc + 0.005, g - 0.005, net_cash, shares), "C37", tol=0.01),
+        one("grid corner, WACC -50 bps and g +50 bps",
+            _dcf_price(fcf, wacc - 0.005, g + 0.005, net_cash, shares), "E35", tol=0.01),
+        one("P/E bar (26x FY29E EPS, discounted 4 years)", v(IS, "J38") * 26 / shares * df4, "C69", tol=0.01),
+        one("EV/EBITDA bar (19x FY29E EBITDA, discounted, plus net cash)",
+            (ebitda * 19 * df4 + net_cash) / shares, "C70", tol=0.01),
+    ]
+    lo, hi = 0.0001, 0.5
+    for _ in range(200):
+        mid = (lo + hi) / 2
+        if _dcf_price(fcf, mid, g, net_cash, shares) > price_ref:
+            lo = mid
+        else:
+            hi = mid
+    info = {"price": price, "price_ref": price_ref, "wacc": wacc, "g": g, "implied_wacc": (lo + hi) / 2,
+            "tv_share": tv_pv / (pv + tv_pv), "scenario": v(A, "B62")}
+    return checks, info
+
+
 def main(argv):
     path = Path(argv[1]) if len(argv) > 1 else DEFAULT_MODEL
     if not path.exists():
@@ -433,7 +497,8 @@ def main(argv):
     print(f"Tolerance: {TOLERANCE:,.0f} (millions USD, for the workbook's rounding)")
     print("-" * 72)
 
-    checks = build_checks(rows, years) + build_transcription_checks(wb, links, years)
+    dcf_checks, dcf = build_dcf_checks(wb)
+    checks = build_checks(rows, years) + build_transcription_checks(wb, links, years) + dcf_checks
     failed = 0
     for check in checks:
         if check.passed:
@@ -453,8 +518,10 @@ def main(argv):
 
     hard = [c for c in checks if not c.advisory]
     notes = [c for c in checks if c.advisory and not c.passed]
-    identities = [c for c in hard if not c.label.startswith("SRC ")]
+    identities = [c for c in hard if not c.label.startswith(("SRC ", "DCF "))]
     sources = [c for c in hard if c.label.startswith("SRC ")]
+    valuation = [c for c in hard if c.label.startswith("DCF ")]
+    valuation_failures = sum(1 for c in valuation if not c.passed)
     identity_failures = sum(1 for c in identities if not c.passed)
     source_failures = sum(1 for c in sources if not c.passed)
 
@@ -464,6 +531,11 @@ def main(argv):
     print(f"{len(sources) - source_failures} of {len(sources)} Validation-tab line "
           f"items match the IS / BS / CFS cells they were transcribed from, "
           f"across {len(years)} years each.")
+    print(f"{len(valuation) - valuation_failures} of {len(valuation)} valuation figures re-derived "
+          f"from the forecast statements and inputs ({dcf['scenario']} scenario).")
+    print(f"DCF: ${dcf['price']:,.2f} a share at WACC {dcf['wacc']:.2%} and g {dcf['g']:.1%}, against "
+          f"${dcf['price_ref']:,.2f}. The reference price implies a WACC of {dcf['implied_wacc']:.2%} "
+          f"on the same cash flows. Terminal value is {dcf['tv_share']:.0%} of enterprise value.")
     if notes:
         print(f"{len(notes)} advisory check(s) flagged above: a presentation "
               f"question, not arithmetic. See the note under each.")
@@ -471,10 +543,10 @@ def main(argv):
         print(f"{failed} FAILED. These are arithmetic, and the workbook's own "
               f"Validation tab reports a tick for them anyway.")
         return 1
-    print("Every total was recomputed outside the spreadsheet and agrees, and "
-          "every line item traces to the statement it came from.")
-    print("Not covered: the DCF, Ratios, Assumptions and Dashboard tabs. Nothing "
-          "here validates the valuation.")
+    print("Every total was recomputed outside the spreadsheet and agrees, every line "
+          "item traces to the statement it came from, and the valuation rebuilds.")
+    print("Not covered: the Ratios, Dashboard and Pivots tabs, and the recorded "
+          "Bear / Base / Bull row of the football field.")
     return 0
 
 
