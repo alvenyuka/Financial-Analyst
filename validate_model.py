@@ -458,7 +458,8 @@ def build_dcf_checks(wb):
         else:
             hi = mid
     info = {"price": price, "price_ref": price_ref, "wacc": wacc, "g": g, "implied_wacc": (lo + hi) / 2,
-            "tv_share": tv_pv / (pv + tv_pv), "scenario": v(A, "B62")}
+            "tv_share": tv_pv / (pv + tv_pv), "scenario": v(A, "B62"),
+            "equity_value": pv + tv_pv + net_cash, "market_value": price_ref * shares}
     return checks, info
 
 
@@ -536,6 +537,9 @@ def main(argv):
     print(f"DCF: ${dcf['price']:,.2f} a share at WACC {dcf['wacc']:.2%} and g {dcf['g']:.1%}, against "
           f"${dcf['price_ref']:,.2f}. The reference price implies a WACC of {dcf['implied_wacc']:.2%} "
           f"on the same cash flows. Terminal value is {dcf['tv_share']:.0%} of enterprise value.")
+    print(f"Equity value ${dcf['equity_value'] / 1e6:,.2f}tn against a market value of "
+          f"${dcf['market_value'] / 1e6:,.2f}tn at the reference price: the market pays "
+          f"${(dcf['market_value'] - dcf['equity_value']) / 1e6:,.2f}tn more than the base case supports.")
     if notes:
         print(f"{len(notes)} advisory check(s) flagged above: a presentation "
               f"question, not arithmetic. See the note under each.")
