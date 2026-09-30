@@ -1,93 +1,97 @@
 # Financial-Analyst
 
-> Can every number in a financial model be traced back to the filing it came from? Three-statement models and DCF valuations built from SEC filings, with an independent Python check that re-derives the statements on every change: 19 of 19 accounting identities and 49 of 49 line items reconcile on the Apple model.
+Three-statement models and DCF valuations built from primary-source SEC filings, with an independent Python
+validator that rebuilds the statements and the valuation outside Excel. On Apple, 19 of 19 accounting
+identities, 49 of 49 transcribed line items and 16 of 16 valuation figures reconcile.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Excel](https://img.shields.io/badge/Excel-LibreOffice%20compatible-217346?logo=microsoftexcel&logoColor=white)](https://www.microsoft.com/en-us/microsoft-365/excel)
-[![No macros](https://img.shields.io/badge/macros-none-success)](#how-it-works)
 [![models validated](https://github.com/alvenyuka/Financial-Analyst/actions/workflows/ci.yml/badge.svg)](https://github.com/alvenyuka/Financial-Analyst/actions/workflows/ci.yml)
 
-![Financial-Analyst banner: primary-source three-statement models and DCF valuations](banner.svg)
+![Apple valuation range by method: DCF $120 to $157 against a share price of $338.40](images/apple_football_field.png)
 
-## The problem
+## Overview
 
-Investment, credit and audit decisions often rest on spreadsheet models, and a single mistyped historical
-figure flows silently into every forecast and valuation built on it. A model's own "all checks pass" cell
-is computed by the same formulas it is supposed to check, so it proves little.
+Investment and credit decisions often rest on spreadsheet models, and a spreadsheet's own "all checks pass"
+cell is computed by the same formulas it is meant to check. These models are built to be audited: every
+historical figure cites the filing and page it came from, inputs sit on one assumptions sheet, and a separate
+program recomputes the arithmetic from the raw cells.
 
-These models are built the way an auditor would want to review them: every historical figure cites the
-filing and page it came from, and a separate program re-checks the arithmetic outside the spreadsheet.
+The first complete model covers Apple Inc. for fiscal years 2021 to 2025 with a forecast to 2029, driven by a
+Bear / Base / Bull scenario engine, and values the company by unlevered DCF with a Gordon growth terminal value.
 
-## What I found
+## Results
 
-On the Apple Inc. model (fiscal years 2021 to 2025):
+Apple, Base scenario, reference price $338.40 (close on 28 Sep 2026):
 
-| Check | Result |
+| Measure | Value |
 |---|---:|
-| Accounting identities re-derived outside Excel (income statement, balance sheet, cash flow, cross-statement ties) | **19 of 19** |
-| Line items traced back to the statement they were transcribed from, five years each | **49 of 49** |
-| DCF implied share price vs reference price, at the model's WACC of 7.79% and terminal growth of 3.0% | $240.05 vs $232.50 |
-| The same model at WACC 8.5% and terminal growth 2.5% | $205.92 |
+| DCF implied share price (WACC 9.34%, terminal growth 2.5%) | **$135.98** |
+| Bear / Base / Bull DCF | $75 / $136 / $256 |
+| WACC implied by the market price on the same cash flows | **5.26%** |
+| Terminal value share of enterprise value | 80% |
+| Analyst targets, low / median / high (44 analysts) | $215 / $340 / $405 |
+
+- On base-case cash flows the model values Apple well below its market price. The market price is consistent
+  with a discount rate of about 5.3%, roughly 4 points below the model's 9.3% WACC, or with much faster growth
+  than the base case assumes.
+- The historical statements reconcile exactly, and every line traces to the 10-K page it was taken from.
+- The valuation is dominated by the terminal value (80% of enterprise value), so the WACC and growth
+  assumptions matter more than the forecast years.
+
+## Approach
+
+```mermaid
+flowchart LR
+    A[SEC 10-K filings] --> B[IS, BS, CFS FY21-FY25]
+    B --> C[Scenario drivers: Bear, Base, Bull]
+    C --> D[Forecast FY26-FY29]
+    D --> E[Unlevered FCF, WACC]
+    E --> F[DCF and football field]
+    B --> G[validate_model.py]
+    F --> G
+```
+
+1. **Historicals** transcribed from Apple's 10-K filings and press releases, each cited to a page.
+2. **Forecast** from segment revenue growth and gross margins, operating expense growth, working-capital days
+   and capital-return policy, switched by the scenario engine.
+3. **Valuation**: unlevered free cash flow discounted at a CAPM-based WACC, a terminal value at the end of year
+   4, sensitivity grids and a football field of methods.
+4. **Validation**: `validate_model.py` re-derives the statement identities, traces each transcribed line to its
+   source cell and rebuilds the DCF, and its tests break a copy of the model to prove each fault is caught.
 
 ![Validation tab: each historical income-statement line for FY21 to FY25 ticked against the 10-K page it came from](images/apple_validation.png)
 
-- **The accounting holds.** Every total the workbook reports agrees with an independent recalculation, and
-  every validation line matches its source statement.
-- **The valuation call depends on two assumptions.** Moving WACC from 7.79% to 8.5% and terminal growth from
-  3.0% to 2.5% turns about 3% upside into about 11% downside. A valuation this sensitive should be presented
-  as a range, not a single price.
-- **One presentation difference is flagged, not hidden.** In FY21 to FY23 cash-flow ending cash exceeds the
-  balance-sheet cash line by about $0.8B to $1.3B, most likely because the cash flow includes restricted
-  cash. It is reported for review rather than suppressed.
+## Repository structure
 
-**What I would tell an investment committee:** rely on the historical statements, which are fully traced and
-reconciled; treat the DCF as a sensitivity range rather than a target price until its known defects are
-fixed.
+```
+Apple/Apple_Financial_Model.xlsx   the model: assumptions, statements, DCF, validation tab
+Apple/Source_filings/              the 10-K and press-release PDFs behind the historicals
+Apple/README.md                    model-specific assumptions and sensitivity tables
+validate_model.py                  independent validator (statements and valuation)
+tests/                             fault-injection tests for the validator
+```
 
-## How it works
-
-1. **One assumptions tab per model** drives every other tab; inputs are colour-coded and calculated cells
-   locked.
-2. **Historical figures from primary sources**: SEC 10-K and 10-Q filings and Apple investor-relations
-   releases, each cited to a page in the Validation tab.
-3. **Three statements and a DCF**: unlevered free cash flow, WACC discounting, Gordon Growth terminal value,
-   and sensitivity tables.
-   ![Apple income statement, FY2021 actuals to FY2029 forecast, with inputs in blue](images/apple_income_statement.png)
-
-4. **An independent validator** (`validate_model.py`) adds the line items up in Python and compares them with
-   the workbook's totals. Its own tests break a copy of the model on purpose and confirm each fault is caught.
-   It runs on every push.
-
-## Run it
+## Getting started
 
 ```bash
 pip install -r requirements.txt
-python validate_model.py          # checks the Apple model; pass a path to check another
-python -m pytest                  # confirms the validator catches deliberately broken models
+python validate_model.py      # rebuild the statements and the valuation, report the implied WACC
+python -m pytest              # prove the validator catches injected faults
 ```
 
-Or open `Apple/Apple_Financial_Model.xlsx` in Excel or LibreOffice Calc and start on the Dashboard tab.
+Or open `Apple/Apple_Financial_Model.xlsx` in Excel or LibreOffice Calc and change the scenario on the
+Assumptions sheet.
 
-## Limitations
+## Notes
 
-- **The DCF tab has known defects**, including a terminal value discounted one period too many, so the
-  implied price is not yet a reliable call. Fixing and restating it is the next step.
-- **The validator does not check the valuation**: the DCF, Ratios, Assumptions and Dashboard tabs are outside
-  its scope.
-- **One complete model so far** (Apple). Safaricom and Equity Group, both listed in Nairobi, are planned.
-
-## More detail
-
-Model-specific assumptions, the DCF defects and the sensitivity tables are in
-[`Apple/README.md`](Apple/README.md). The full write-up of the conventions and the validator is in
-[`docs/METHODOLOGY.md`](docs/METHODOLOGY.md).
+- Forecast drivers are assumptions: the Base products gross margin is the FY24-FY25 average and the tax rate
+  the FY21-FY25 average excluding FY24's one-off EU State Aid charge.
+- Safaricom and Equity Group, both listed in Nairobi, are the next models.
 
 ## License
 
-MIT. See [`LICENSE`](LICENSE). Sources: SEC EDGAR filings (CIK 0000320193) and Apple investor-relations disclosures.
+MIT. See [`LICENSE`](LICENSE). Sources: SEC EDGAR filings (CIK 0000320193), Apple investor relations, and
+stockanalysis.com for the analyst range.
 
-## Connect
-
-Built by Alven Yuka, CPA Finalist and Accounting Specialist at GIZ, Nairobi.
-
-📫 [alvenyuka2@gmail.com](mailto:alvenyuka2@gmail.com) · 💼 [LinkedIn](https://www.linkedin.com/in/alven-yuka-610b78174/) · 🐙 [GitHub](https://github.com/alvenyuka)
+Alven Yuka · [LinkedIn](https://www.linkedin.com/in/alven-yuka-610b78174/) · [Email](mailto:alvenyuka2@gmail.com)

@@ -124,13 +124,17 @@ formulas and doing the comparison in Python. Both families have to pass. A test
 injects exactly that fault, changing a figure on the IS and leaving the
 Validation tab alone, and asserts the run fails while the identities still pass.
 
-**Still not checked, so a green badge is not read as more than it is:** the
-`DCF`, `Ratios`, `Assumptions` and `Dashboard` tabs. Nothing in CI validates the
-valuation, and the DCF tab has known defects, listed in
-[`Apple/README.md`](.././Apple/README.md).
+**The valuation is rebuilt too.** The validator recomputes WACC from its inputs,
+each year's unlevered free cash flow, the discounted forecast and the terminal value
+at the end of year 4, enterprise and equity value, the per-share price and upside,
+the sensitivity grid's centre and corners, and the discounted multiples: 16 figures.
+It also reports the WACC at which the base-case cash flows justify the market price.
+Still not checked: the `Ratios`, `Dashboard` and `Pivots` tabs, and the Bear / Base
+/ Bull row of the football field, which is recorded rather than calculated.
 
-**Current result on the Apple model: 19 of 19 identities match and 49 of 49 line
-items trace to their source tab**, plus one advisory flag. The advisory is that the cash flow statement's ending cash exceeds
+**Current result on the Apple model: 19 of 19 identities match, 49 of 49 line
+items trace to their source tab and 16 of 16 valuation figures rebuild**, plus one
+advisory flag. The advisory is that the cash flow statement's ending cash exceeds
 the balance sheet's cash line by roughly $0.8B to $1.3B in FY21 through FY23,
 while FY24 and FY25 agree exactly. Apple's cash flow statement historically
 reconciled to "cash, cash equivalents and restricted cash" where the balance
@@ -145,33 +149,28 @@ affect the roll-forward tie this repo actually claims, which passes in every yea
 
 | Metric | Value |
 |---|---|
-| Validation-tab lines reconciled across tabs | 50 / 50 (100%), 5 years each |
+| Validation-tab lines traced to the statements | 49 of 49, five years each |
 | Citation basis for the historicals | SEC EDGAR (CIK 0000320193) + Apple investor-relations press releases, cited per line with a page number |
 | Filings covered | 10-Ks filed Oct 2022, Nov 2023, Oct 2025 |
-| Scenario the workbook is saved on | Bull (`Assumptions!B62`) |
-| WACC and terminal growth the model computes | 7.79% and 3.0% (`Assumptions!B54`, `B55`) |
-| Implied share price vs. the reference price | $240.05 vs. $232.50, about 3% upside |
-| The same model at WACC 8.5% and g 2.5% | $205.92 (`DCF!D36`), about 11% downside |
+| Scenario the workbook is saved on | Base (`Assumptions!B62`) |
+| WACC and terminal growth | 9.34% and 2.5% (`Assumptions!B54`, `B55`) |
+| Implied share price vs. reference price | $135.98 vs. $338.40 (close on 28 Sep 2026) |
+| Bear / Bull implied price | $75.46 / $255.75 |
+| WACC implied by the market price, same cash flows | 5.26% |
 
-Earlier versions of this table, and of the profile README, called WACC 8.5% with
-terminal growth 2.5% the base case behind the $240. It is not: those are not the
-inputs the model runs and not any scenario in its scenario engine. The
-workbook's own caption says 8.5% / 2.5%, which is where the error came from. Both
-figures are shown above because the direction of the call changes between them.
-
-The DCF tab has other known defects, including a terminal value discounted one
-period too many and a football-field row that reads from a different model. They
-are listed in full in [`Apple/README.md`](.././Apple/README.md), and none of them is
-checked by the validator, which does not open the DCF tab.
-
-Full detail, including the two DCF sensitivity tables (WACC × terminal growth, revenue growth × operating margin), is in [`Apple/README.md`](.././Apple/README.md#validation).
+An earlier version of the workbook reported $240.05 on its Bull scenario against an
+undated $232.50. That figure discounted the terminal value one period too many and
+was compared with a stale price; both are corrected, and the model is saved on the
+Base scenario. The assumptions behind the Base case are set out in
+[`Apple/README.md`](../Apple/README.md).
 
 ## Roadmap
 
 - [x] Repo conventions: single-source assumptions tab, filing-traced historicals, validation tab, sensitivity toggles
-- [x] Apple Inc. (AAPL): three-statement model + DCF, 50/50 lines reconciled
-- [ ] Correct the DCF tab's known defects and restate the valuation (see `Apple/README.md`)
-- [ ] Extend the validator to the DCF, Ratios and Assumptions tabs
+- [x] Apple Inc. (AAPL): three-statement model + DCF, 49/49 lines traced
+- [x] Correct the DCF tab's defects and restate the valuation
+- [x] Extend the validator to the DCF
+- [ ] Extend the validator to the Ratios tab
 - [ ] Microsoft (MSFT)
 - [ ] Safaricom (SCOM.NR), Nairobi Securities Exchange
 - [ ] Equity Group Holdings (EQTY.NR)
