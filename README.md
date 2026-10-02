@@ -1,9 +1,9 @@
 # Financial-Analyst
 
-Three-statement models and DCF valuations built from primary-source SEC filings, with an independent Python
-validator that rebuilds the statements and the valuation outside Excel. On Apple, every accounting identity,
-transcribed line item and valuation figure reconciles, and the model shows that the **$338.40 share price
-implies a 5.26% discount rate**, about 4 points below a CAPM-based 9.34%.
+Financial models of listed companies, built from their SEC filings and checked line by line by an independent
+Python program. The Apple model values the shares at **$135.98 against a market price of $338.40**: to justify
+that price, investors must accept about a **5.3% return** on Apple's cash flows, against the 9.3% a standard
+cost-of-capital estimate gives. Every historical figure, accounting check and valuation figure reconciles.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Excel](https://img.shields.io/badge/Excel-LibreOffice%20compatible-217346?logo=microsoftexcel&logoColor=white)](https://www.microsoft.com/en-us/microsoft-365/excel)
