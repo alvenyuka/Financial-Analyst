@@ -1,7 +1,7 @@
 # Financial-Analyst
 
 Financial models of listed companies, built from their SEC filings and checked line by line by an independent
-Python program. The Apple model values the shares at **$135.98 against a market price of $338.40**: to justify
+Python program. The Apple model values the shares at **$139.50 against a market price of $338.40**: to justify
 that price, investors must accept about a **5.3% return** on Apple's cash flows, against the 9.3% a standard
 cost-of-capital estimate gives. Every historical figure, accounting check and valuation figure reconciles.
 
@@ -9,7 +9,7 @@ cost-of-capital estimate gives. Every historical figure, accounting check and va
 [![Excel](https://img.shields.io/badge/Excel-LibreOffice%20compatible-217346?logo=microsoftexcel&logoColor=white)](https://www.microsoft.com/en-us/microsoft-365/excel)
 [![models validated](https://github.com/alvenyuka/Financial-Analyst/actions/workflows/ci.yml/badge.svg)](https://github.com/alvenyuka/Financial-Analyst/actions/workflows/ci.yml)
 
-![Apple valuation range by method: DCF $120 to $157 against a share price of $338.40](images/apple_football_field.png)
+![Apple valuation range by method: DCF $123 to $162 against a share price of $338.40](images/apple_football_field.png)
 
 ## Contents
 
@@ -22,6 +22,8 @@ cost-of-capital estimate gives. Every historical figure, accounting check and va
 7. [Limitations](#limitations)
 8. [Repository structure](#repository-structure)
 9. [How to run](#how-to-run)
+10. [Documentation](#documentation)
+11. [License](#license)
 
 ## Business problem
 
@@ -63,26 +65,27 @@ flowchart LR
 
 1. **Historicals** transcribed from the 10-K filings and press releases, each line cited to a page.
 2. **Forecast** from segment revenue growth and gross margins, operating-expense growth, working-capital days
-   and capital returns, switched between Bear, Base and Bull by one cell (`CHOOSE(MATCH(...))`).
+   and capital returns, with no balancing plug: cash comes from the cash flow statement, switched between Bear, Base and Bull by one cell (`CHOOSE(MATCH(...))`).
 3. **Valuation.** Unlevered free cash flow discounted at a CAPM-based WACC (cost of equity 10.0% at beta 1.1,
-   after-tax cost of debt 3.4%, 90/10 weights), a Gordon terminal value at the end of year 4, two sensitivity
-   grids and a football field comparing methods.
+   after-tax cost of debt 3.4%, 90/10 weights) from the 28 Sep 2026 valuation date to each fiscal year-end, a
+   Gordon terminal value at the FY2029 year-end, two sensitivity grids and a football field comparing methods.
+   FY2026 ended two days before the valuation date, so its cash is counted in net cash rather than discounted.
 4. **Reverse DCF.** The validator solves for the discount rate at which the same cash flows justify the market
    price.
 5. **Independent validation.** `validate_model.py` re-derives the statement identities, traces each transcribed
-   line to its source cell and rebuilds the DCF; its tests break a copy of the model to prove each fault is caught.
+   line to its source cell, rebuilds working capital from the balance sheet and rebuilds the DCF; its tests break a copy of the model to prove each fault is caught.
 
 ## Results
 
 | Apple, Base scenario | Value |
 |---|---:|
-| Accounting identities reconciled | 19 of 19 |
-| Transcribed line items traced to source cells | 49 of 49 |
-| Valuation figures rebuilt independently | 16 of 16 |
-| Enterprise value | $1.99tn |
-| DCF implied share price | **$135.98** |
-| Bear / Bull implied price | $75.46 / $255.75 |
-| Terminal value share of enterprise value | 80% |
+| Accounting identities reconciled | 20 of 20 |
+| Transcribed line items traced to source cells | 56 of 56 |
+| Valuation figures rebuilt independently | 23 of 23 |
+| Enterprise value | $2.05tn |
+| DCF implied share price | **$139.50** |
+| Bear / Bull implied price | $75.86 / $265.54 |
+| Terminal value share of enterprise value | 83% |
 
 ![Apple DCF: free cash flow build, discounting and valuation summary](images/apple_dcf.png)
 
@@ -93,11 +96,11 @@ What the model tells an investment or credit committee about Apple at $338.40 (a
 
 | Measure | Value |
 |---|---:|
-| Equity value, Base DCF | $2.04tn |
+| Equity value, Base DCF | $2.09tn |
 | Market value at $338.40 (15.0bn diluted shares) | $5.08tn |
-| Premium the market pays over the Base case | **$3.04tn** |
-| Discount rate the market price implies | **5.26%**, against 9.34% |
-| Bull-case price against market | $255.75, 24% below |
+| Premium the market pays over the Base case | **$2.98tn** |
+| Discount rate the market price implies | **5.30%**, against 9.34% |
+| Bull-case price against market | $265.54, 22% below |
 
 At a 9.34% cost of capital the market price cannot be reached even in the Bull case. It is consistent with
 investors accepting about a 5.3% return on Apple's cash flows, or with growth well above every scenario here.
@@ -105,19 +108,21 @@ A committee can use the model to see which assumption carries the price, rather 
 
 ## Key insights
 
-- **The discount rate carries the valuation.** The terminal value is 80% of enterprise value, so a half-point
+- **The discount rate carries the valuation.** The terminal value is 83% of enterprise value, so a half-point
   change in WACC moves the price more than any forecast-year assumption.
 - **Services margins drive the forecast.** Products gross margin is held at its fiscal 2024-2025 average of
   37%, while Services sits at 76% on a trend rising about 1.4 points a year.
-- **Spreadsheet checks need an outside check.** An earlier version of the workbook discounted the terminal value
-  by the wrong number of periods, a step the workbook's own Validation tab does not test; the validator now
-  rebuilds it,
-  and its tests corrupt one cell at a time to confirm each break is reported.
+- **Spreadsheet checks need an outside check.** An independent review found the cash flow statement reading each
+  forecast year's working-capital movement from the year before, and net cash taken from the wrong year, while
+  the workbook's own checks showed all green. Both are fixed and the validator now rebuilds those figures from
+  the balance sheet itself; its tests corrupt one cell at a time to confirm each break is reported. The
+  [methodology](docs/METHODOLOGY.md#review-history) lists every finding.
 
 ![Validation tab: each historical income-statement line for FY21 to FY25 ticked against the 10-K page it came from](images/apple_validation.png)
 
 ## Limitations
 
+- **Bear and Bull are recorded values**, saved with each scenario active; switching `B62` recalculates them.
 - **Forecast drivers are assumptions.** The tax rate is the fiscal 2021-2025 average excluding fiscal 2024's
   one-off EU State Aid charge; the sanity bands on forecasts are wide, so passing them is a weak test.
 - **One company so far.** Safaricom and Equity Group, both listed in Nairobi, are the next models.

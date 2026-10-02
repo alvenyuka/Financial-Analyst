@@ -20,12 +20,17 @@ exited 0. The transcription checks added below close it, by reading the source
 sheets directly and comparing them to the Validation tab, row by row and year by
 year. Both families must pass for the run to succeed.
 
-The valuation is checked too: the DCF is rebuilt from the forecast statements and
-the Assumptions inputs (WACC, free cash flow, present values, terminal value at the
-end of year 4, enterprise and equity value, the per-share price and upside), along
-with the sensitivity grid's centre and corners and the discounted multiples. Still
-out of scope: the `Ratios`, `Dashboard` and `Pivots` tabs, and the Bear / Base /
-Bull row of the football field, which is a recorded snapshot rather than a formula.
+The valuation is checked too, without reusing the workbook's own cell choices:
+the change in working capital is rebuilt from the balance-sheet lines and compared
+with the cash flow statement; the forecast balance sheet is re-added from its
+components; and the DCF is rebuilt from the valuation date (Assumptions!B60) and
+the fiscal year-end dates, so a cash flow from a year that ended before the
+valuation date is excluded and its cash is counted in net cash instead. WACC,
+free cash flow, present values, terminal value, enterprise and equity value, the
+per-share price, the sensitivity grid and the discounted multiples are all
+re-derived. Still out of scope: the `Ratios`, `Dashboard` and `Pivots` tabs, and
+the Bear and Bull prices, which are recorded with each scenario active and printed
+as recorded rather than re-derived.
 
 What it checks:
 
@@ -159,6 +164,23 @@ def read_rows(ws, first_col=2, n_years=5):
     return rows
 
 
+def find_section_headers(ws):
+    """Locate each statement's year-header row from its section title, so inserted
+    rows on the Validation tab cannot shift a check onto the wrong row."""
+    titles = {"income statement": "INCOME STATEMENT", "balance sheet": "BALANCE SHEET",
+              "cash flow statement": "CASH FLOW STATEMENT"}
+    found = {}
+    for r in range(1, ws.max_row + 1):
+        text = str(ws.cell(r, 1).value or "")
+        for key, title in titles.items():
+            if key not in found and text.startswith(title):
+                found[key] = r + 1
+    missing = [k for k in titles if k not in found]
+    if missing:
+        raise ValueError(f"section title(s) not found on the Validation tab: {missing}")
+    return found
+
+
 def check_year_headers(ws, header_rows, n_years=5):
     """Every statement must be laid out over the same years.
 
@@ -221,18 +243,23 @@ def build_checks(rows, years):
         # ---- balance sheet ----------------------------------------------
         Check("BS  current assets sum to the subtotal",
               add("Cash & equivalents", "Marketable securities (current)", "Accounts receivable, net",
-                  "Inventory", "Other CA (vendor + other)"),
+                  "Inventory", "Vendor non-trade receivables", "Other current assets"),
               g("Total current assets"), years),
         Check("BS  total assets = current + PP&E + other non-current",
               add("Total current assets", "Marketable securities (non-curr)",
                   "Property, plant & equipment, net", "Other non-current assets"),
               g("Total assets"), years),
         Check("BS  current liabilities sum to the subtotal",
-              add("Accounts payable", "Other CL (bundled)"), g("Total current liabilities"), years),
+              add("Accounts payable", "Other current liabilities", "Deferred revenue",
+                  "Commercial paper", "Term debt (current)"),
+              g("Total current liabilities"), years),
         Check("BS  total liabilities = current + LT debt + other non-current",
               add("Total current liabilities", "Long-term debt (non-current)",
                   "Other non-current liabilities"),
               g("Total liabilities"), years),
+        Check("BS  equity = common stock + retained earnings + other comprehensive income",
+              add("Common stock and APIC", "Retained earnings (deficit)", "Accumulated OCI (loss)"),
+              g("Shareholders' equity"), years),
         Check("BS  liabilities + equity subtotal",
               add("Total liabilities", "Shareholders' equity"),
               g("Total liabilities + equity"), years),
@@ -258,14 +285,10 @@ def build_checks(rows, years):
         Check("TIE ending cash on the CFS = cash on the BS",
               g("Ending cash"), g("Cash & equivalents"), years,
               note=(
-                  "Apple's cash flow statement historically reconciled to 'cash, "
-                  "cash equivalents and restricted cash', while the balance sheet "
-                  "line excludes restricted cash. If the gap here is restricted "
-                  "cash, the model is faithfully reproducing each filing's own "
-                  "presentation and the two lines are not supposed to be equal. "
-                  "Confirm the figure against the restricted-cash disclosure in "
-                  "the relevant 10-K before treating this as either a defect or a "
-                  "non-issue, and then say which it is in the README."
+                  "Expected for FY21 to FY23: those cash flow statements reconcile "
+                  "to cash, cash equivalents and restricted cash, while the balance "
+                  "sheet line excludes restricted cash, so the gaps (989, 1,331 and "
+                  "772) are the restricted cash. From FY24 Apple's statements agree."
               ),
               advisory=True),
     ]
@@ -402,64 +425,129 @@ def build_transcription_checks(wb_values, links, years):
     return checks
 
 
-def _dcf_price(fcf, wacc, g, net_cash, shares):
-    """Per-share value: four years of free cash flow plus a Gordon terminal value at year 4."""
-    pv = sum(f / (1 + wacc) ** t for t, f in enumerate(fcf, start=1))
-    tv = fcf[-1] * (1 + g) / (wacc - g) / (1 + wacc) ** len(fcf)
+def _dcf_price(fcf, periods, wacc, g, net_cash, shares):
+    """Per-share value: cash flows from years ending after the valuation date, plus a
+    Gordon terminal value at the last forecast year-end."""
+    pv = sum(f / (1 + wacc) ** t for f, t in zip(fcf, periods) if t > 0)
+    tv = fcf[-1] * (1 + g) / (wacc - g) / (1 + wacc) ** periods[-1]
     return (pv + tv + net_cash) / shares
 
 
+# Labels the DCF rebuild depends on. An inserted row would otherwise move a cell
+# reference silently, so each address is checked against its label first.
+EXPECTED_LABELS = {
+    ("IS", "A28"): "Operating income",
+    ("CFS", "A10"): "Depreciation",
+    ("CFS", "A13"): "Changes in working capital",
+    ("CFS", "A19"): "Capital expenditures",
+    ("CFS", "A30"): "Cash & equivalents, ending",
+    ("BS", "B5"): "Cash",
+    ("BS", "B15"): "Long-term marketable securities",
+    ("BS", "B29"): "Long-term debt",
+    ("Assumptions", "A25"): "Effective tax rate",
+    ("Assumptions", "A54"): "WACC",
+    ("Assumptions", "A60"): "Valuation date",
+    ("DCF", "A14"): "Fiscal year end",
+}
+
+WC_ASSETS = (7, 8, 9, 10, 16)     # receivables, inventory, vendor receivables, other current, other non-current
+WC_LIABS = (21, 22, 23, 30)       # payables, other current, deferred revenue, other non-current
+BS_ASSETS = (5, 6, 7, 8, 9, 10, 14, 15, 16)
+BS_LIABS_EQUITY = (21, 22, 23, 24, 25, 29, 30, 35, 36, 37)
+
+
 def build_dcf_checks(wb):
-    """Rebuild the DCF tab from the forecast statements and the Assumptions inputs."""
+    """Rebuild working capital, the forecast balance sheet and the DCF from the statements."""
     IS, BS, CFS = wb["IS"], wb["BS"], wb["CFS"]
     A, D = wb["Assumptions"], wb["DCF"]
     v = lambda ws, ref: ws[ref].value  # noqa: E731
-    cols = "GHIJ"                      # FY2026E to FY2029E on the statements
-    tax = v(A, "B50")
-    ke = v(A, "B45") + v(A, "B47") * v(A, "B46")
-    wacc = ke * (1 - v(A, "B52")) + v(A, "B49") * (1 - tax) * v(A, "B52")
-    g = v(A, "B55")
-    fcf = [v(IS, f"{c}28") * (1 - tax) + v(CFS, f"{c}10") + v(CFS, f"{c}19") + v(CFS, f"{c}13") for c in cols]
-    pv = sum(f / (1 + wacc) ** t for t, f in enumerate(fcf, start=1))
-    tv_pv = fcf[-1] * (1 + g) / (wacc - g) / (1 + wacc) ** 4
-    net_cash = v(BS, "F5") + v(BS, "F6") + v(BS, "F15") - v(BS, "F42")
-    shares, price_ref = v(A, "B58"), v(A, "B59")
-    price = (pv + tv_pv + net_cash) / shares
-    df4 = 1 / (1 + wacc) ** 4
-    ebitda = v(IS, "J28") + v(CFS, "J10")
+    for (sheet, ref), want in EXPECTED_LABELS.items():
+        got = str(wb[sheet][ref].value or "").strip()
+        if not got.startswith(want):
+            raise ValueError(f"{sheet}!{ref} is {got!r}, expected a label starting {want!r}")
+
+    stmt = "GHIJ"                      # FY2026E to FY2029E on IS, CFS and Assumptions
+    bs_cur, bs_prev = "HIJK", "GHIJ"   # the balance sheet starts one column later
+    years = ("FY26E", "FY27E", "FY28E", "FY29E")
+    checks = []
 
     def one(label, derived, cell, tol=TOLERANCE, sheet=D):
         return Check(f"DCF {label}", [derived], [v(sheet, cell)], ["DCF"], tol=tol)
 
-    checks = [
+    # Working capital from the balance sheet, not from the cash flow statement.
+    dwc = []
+    for cur, prev in zip(bs_cur, bs_prev):
+        move = lambda r: v(BS, f"{cur}{r}") - v(BS, f"{prev}{r}")  # noqa: E731
+        dwc.append(-sum(move(r) for r in WC_ASSETS) + sum(move(r) for r in WC_LIABS))
+    checks.append(Check("DCF change in working capital = movement in the balance-sheet lines",
+                        dwc, [v(CFS, f"{c}13") for c in stmt], list(years)))
+
+    # The forecast balance sheet, re-added from its line items (no totals, no plug).
+    gap = [sum(v(BS, f"{c}{r}") for r in BS_ASSETS) - sum(v(BS, f"{c}{r}") for r in BS_LIABS_EQUITY)
+           for c in bs_cur]
+    checks.append(Check("DCF forecast balance sheet balances from its line items", gap,
+                        [0.0] * 4, list(years)))
+    checks.append(Check("DCF forecast cash = cash flow statement ending cash",
+                        [v(CFS, f"{c}30") for c in stmt], [v(BS, f"{c}5") for c in bs_cur], list(years)))
+
+    taxes = [v(A, f"{c}25") for c in stmt]
+    wacc_tax = v(A, "B50")
+    ke = v(A, "B45") + v(A, "B47") * v(A, "B46")
+    wacc = ke * (1 - v(A, "B52")) + v(A, "B49") * (1 - wacc_tax) * v(A, "B52")
+    g = v(A, "B55")
+    fcf = [v(IS, f"{c}28") * (1 - t) + v(CFS, f"{c}10") + v(CFS, f"{c}19") + w
+           for c, t, w in zip(stmt, taxes, dwc)]
+    val_date = v(A, "B60")
+    year_ends = [v(D, f"{c}14") for c in "BCDE"]
+    periods = [(ye - val_date).days / 365.25 for ye in year_ends]
+    pv = sum(f / (1 + wacc) ** t for f, t in zip(fcf, periods) if t > 0)
+    tv_pv = fcf[-1] * (1 + g) / (wacc - g) / (1 + wacc) ** periods[-1]
+    n = "H"                                                    # FY26E, the last year ended before valuation
+    debt = v(BS, f"{n}24") + v(BS, f"{n}25") + v(BS, f"{n}29")
+    net_cash = v(BS, f"{n}5") + v(BS, f"{n}6") + v(BS, f"{n}15") - debt
+    shares, price_ref = v(A, "B58"), v(A, "B59")
+    price = (pv + tv_pv + net_cash) / shares
+    df_last = 1 / (1 + wacc) ** periods[-1]
+    ebitda = v(IS, "J28") + v(CFS, "J10")
+    included = [y for y, t in zip(years, periods) if t > 0]
+
+    checks += [
         one("WACC = cost of equity x E/V + after-tax cost of debt x D/V", wacc, "B54", tol=1e-9, sheet=A),
-        *[one(f"unlevered free cash flow {y} = NOPAT + D&A - CapEx - change in WC", f, f"{c}13")
-          for y, f, c in zip(("FY26E", "FY27E", "FY28E", "FY29E"), fcf, "BCDE")],
-        one("sum of discounted forecast cash flows", pv, "B20"),
-        one("terminal value, discounted from the end of year 4", tv_pv, "B21"),
+        *[one(f"unlevered free cash flow {y} = NOPAT at the scenario tax rate + D&A - CapEx - change in WC", f, f"{c}13")
+          for y, f, c in zip(years, fcf, "BCDE")],
+        *[one(f"years from valuation date to {y} year-end", t, f"{c}15", tol=1e-9)
+          for y, t, c in zip(years, periods, "BCDE")],
+        one(f"sum of discounted cash flows ({', '.join(included)})", pv, "B20"),
+        one("terminal value, discounted from the FY29E year-end", tv_pv, "B21"),
         one("enterprise value", pv + tv_pv, "B22"),
-        one("net cash (FY25) = cash + marketable securities - total debt", net_cash, "B23"),
+        one("net cash (FY26E) = cash + marketable securities - total debt", net_cash, "B23"),
         one("implied share price", price, "B26", tol=0.01),
         one("upside = implied price / reference price - 1", price / price_ref - 1, "B28", tol=1e-6),
         one("sensitivity grid centre equals the headline price", price, "D36", tol=0.01),
         one("grid corner, WACC +50 bps and g -50 bps",
-            _dcf_price(fcf, wacc + 0.005, g - 0.005, net_cash, shares), "C37", tol=0.01),
+            _dcf_price(fcf, periods, wacc + 0.005, g - 0.005, net_cash, shares), "C37", tol=0.01),
         one("grid corner, WACC -50 bps and g +50 bps",
-            _dcf_price(fcf, wacc - 0.005, g + 0.005, net_cash, shares), "E35", tol=0.01),
-        one("P/E bar (26x FY29E EPS, discounted 4 years)", v(IS, "J38") * 26 / shares * df4, "C69", tol=0.01),
-        one("EV/EBITDA bar (19x FY29E EBITDA, discounted, plus net cash)",
-            (ebitda * 19 * df4 + net_cash) / shares, "C70", tol=0.01),
+            _dcf_price(fcf, periods, wacc - 0.005, g + 0.005, net_cash, shares), "E35", tol=0.01),
+        one("P/E bar (mid multiple x FY29E diluted EPS, discounted)",
+            v(IS, "J43") * v(A, "C97") * df_last, "C69", tol=0.01),
+        one("EV/EBITDA bar (mid multiple x FY29E EBITDA, discounted, plus net cash)",
+            (ebitda * v(A, "C98") * df_last + net_cash) / shares, "C70", tol=0.01),
     ]
-    lo, hi = 0.0001, 0.5
+
+    lo, hi = g + 1e-6, 0.5
+    f_lo, f_hi = (_dcf_price(fcf, periods, x, g, net_cash, shares) for x in (lo, hi))
+    if not f_lo > price_ref > f_hi:
+        raise ValueError("the reference price is outside the range the reverse DCF can solve for")
     for _ in range(200):
         mid = (lo + hi) / 2
-        if _dcf_price(fcf, mid, g, net_cash, shares) > price_ref:
+        if _dcf_price(fcf, periods, mid, g, net_cash, shares) > price_ref:
             lo = mid
         else:
             hi = mid
     info = {"price": price, "price_ref": price_ref, "wacc": wacc, "g": g, "implied_wacc": (lo + hi) / 2,
-            "tv_share": tv_pv / (pv + tv_pv), "scenario": v(A, "B62"),
-            "equity_value": pv + tv_pv + net_cash, "market_value": price_ref * shares}
+            "tv_share": tv_pv / (pv + tv_pv), "scenario": v(A, "B62"), "ev": pv + tv_pv,
+            "net_cash": net_cash, "equity_value": pv + tv_pv + net_cash, "market_value": price_ref * shares,
+            "bear": v(D, "B68"), "bull": v(D, "D68")}
     return checks, info
 
 
@@ -476,10 +564,7 @@ def main(argv):
 
     # Verified, not assumed: same years across all three statements, and no
     # duplicate row label that a check could silently bind to the wrong row.
-    years = check_year_headers(
-        ws,
-        {"income statement": 15, "balance sheet": 35, "cash flow statement": 58},
-    )
+    years = check_year_headers(ws, find_section_headers(ws))
     rows = read_rows(ws)
 
     # A second load, formulas rather than values, purely to read the source-cell
@@ -537,20 +622,23 @@ def main(argv):
     print(f"DCF: ${dcf['price']:,.2f} a share at WACC {dcf['wacc']:.2%} and g {dcf['g']:.1%}, against "
           f"${dcf['price_ref']:,.2f}. The reference price implies a WACC of {dcf['implied_wacc']:.2%} "
           f"on the same cash flows. Terminal value is {dcf['tv_share']:.0%} of enterprise value.")
+    print(f"Enterprise value ${dcf['ev'] / 1e6:,.2f}tn plus FY26E net cash ${dcf['net_cash'] / 1e3:,.1f}bn.")
+    print(f"Bear / Bull prices as recorded in the workbook (not re-derived): "
+          f"${dcf['bear']:,.2f} / ${dcf['bull']:,.2f}.")
     print(f"Equity value ${dcf['equity_value'] / 1e6:,.2f}tn against a market value of "
           f"${dcf['market_value'] / 1e6:,.2f}tn at the reference price: the market pays "
           f"${(dcf['market_value'] - dcf['equity_value']) / 1e6:,.2f}tn more than the base case supports.")
     if notes:
-        print(f"{len(notes)} advisory check(s) flagged above: a presentation "
-              f"question, not arithmetic. See the note under each.")
+        print(f"{len(notes)} advisory check(s) flagged above: explained presentation "
+              f"differences, not arithmetic. See the note under each.")
     if failed:
         print(f"{failed} FAILED. These are arithmetic, and the workbook's own "
               f"Validation tab reports a tick for them anyway.")
         return 1
     print("Every total was recomputed outside the spreadsheet and agrees, every line "
           "item traces to the statement it came from, and the valuation rebuilds.")
-    print("Not covered: the Ratios, Dashboard and Pivots tabs, and the recorded "
-          "Bear / Base / Bull row of the football field.")
+    print("Not covered: the Ratios, Dashboard and Pivots tabs; the Bear and Bull "
+          "prices are printed as recorded.")
     return 0
 
 

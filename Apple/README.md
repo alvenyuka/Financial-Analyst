@@ -2,7 +2,7 @@
 
 A three-statement model of Apple for fiscal years 2021 to 2025, forecast to 2029 under Bear, Base and Bull
 scenarios, and valued by unlevered DCF. Every historical line cites the 10-K page it came from; on the Base
-scenario the DCF gives **$135.98** a share against a **$338.40** close on 28 Sep 2026.
+scenario the DCF gives **$139.50** a share against a **$338.40** close on 28 Sep 2026.
 
 ![Apple DCF: free cash flow build, discounting and valuation summary](../images/apple_dcf.png)
 
@@ -10,12 +10,14 @@ scenario the DCF gives **$135.98** a share against a **$338.40** close on 28 Sep
 
 | Tab | Contents |
 |---|---|
-| Dashboard | Headline metrics and charts |
-| Assumptions | Every driver: segment growth and margins, operating expenses, working-capital days, WACC inputs, terminal growth, share count, reference price, and the scenario switch in `B62` |
+| Cover | Scope, sources and colour conventions |
+| Dashboard | Headline metrics and charts, linked to the statements |
+| Assumptions | Every driver: segment growth and margins, operating expenses, working-capital days, balance-sheet drivers, WACC inputs, terminal growth, valuation date, share count, reference price, football-field multiples, and the scenario switch in `B62` |
 | IS / BS / CFS | Statements, five years historical (FY21 to FY25) and four projected (FY26E to FY29E) |
 | Ratios | Derived ratios |
 | DCF | Free cash flow build, discounting, valuation summary, two sensitivity grids, tornado and football field |
 | Validation | Line-by-line 10-K cross-reference, structural checks and forecast sanity bands |
+| Pivots | Pivot summaries of the statements |
 
 ![Apple income statement, FY2021 actuals to FY2029 forecast, with inputs in blue](../images/apple_income_statement.png)
 
@@ -25,13 +27,16 @@ scenario the DCF gives **$135.98** a share against a **$338.40** close on 28 Sep
 |---|---:|
 | WACC (cost of equity 10.0% at beta 1.1, after-tax cost of debt 3.4%, 90/10 weights) | 9.34% |
 | Terminal growth | 2.5% |
-| Enterprise value | $1.99tn |
-| Implied share price | **$135.98** |
-| Bear / Bull implied price | $75.46 / $255.75 |
-| WACC implied by the $338.40 market price, same cash flows | 5.26% |
+| Enterprise value | $2.05tn |
+| Net cash at FY26E (cash and marketable securities less debt) | $41.4bn |
+| Implied share price | **$139.50** |
+| Bear / Bull implied price (recorded with each scenario active) | $75.86 / $265.54 |
+| WACC implied by the $338.40 market price, same cash flows | 5.30% |
 
-The terminal value is the Gordon value at the end of year 4, discounted four periods, and makes up 80% of
-enterprise value. The WACC × growth grid is centred on the active scenario, so its centre cell equals the
+Cash flows are discounted from the 28 Sep 2026 valuation date to each fiscal year-end. FY2026 ended on 26 Sep
+2026, before the valuation date, so its cash flow is not discounted and its cash is in FY26E net cash. The
+terminal value is the Gordon value at the FY2029 year-end, 3.0 years out, and makes up 83% of enterprise
+value. The WACC × growth grid is centred on the active scenario, so its centre cell equals the
 headline price. The football field compares the DCF with discounted P/E and EV/EBITDA ranges, the 52-week
 closing range and the analyst range (44 analysts, $215 to $405, stockanalysis.com, 29 Sep 2026).
 
@@ -44,18 +49,21 @@ Key Base assumptions and their basis:
 
 ## Validation
 
-- **Balance sheet balances** (assets minus liabilities minus equity is zero) in all nine years.
-- **Cash flow ties**: ending cash each year equals the next year's beginning cash and the balance-sheet cash.
+- **Balance sheet balances** (assets minus liabilities minus equity is zero) in all nine years, with no
+  balancing plug: forecast cash is the result of the cash flow statement, and long-term securities are sold
+  only to keep cash above Apple's lowest FY21-FY25 year-end balance ($23.6bn).
+- **Cash flow ties**: ending cash each year equals the next year's beginning cash and, from FY24, the
+  balance-sheet cash. FY21 to FY23 differ by restricted cash, which Apple's cash flow statements then included.
 - **Transcription**: the Validation tab's copy of each historical line matches the statement cell it came from.
-- **Independent rebuild**: `../validate_model.py` re-derives 19 identities, traces 49 line items to their source
-  cells and rebuilds 16 valuation figures from the forecast statements and inputs.
+- **Independent rebuild**: `../validate_model.py` re-derives 20 identities, traces 56 line items to their source
+  cells and rebuilds 23 valuation figures, including working capital from the balance sheet.
 
 The link to the filings is carried by the Source column's page citations; the filings for FY23 onward are in
 `Source_filings/`, and FY21 and FY22 cite the FY2022 and FY2023 10-Ks on SEC EDGAR.
 
 ## Modelling conventions
 
-- One assumptions sheet drives every tab; inputs are colour-coded and calculated cells locked.
+- One assumptions sheet drives every tab; inputs are blue, calculations black and cross-sheet links green.
 - Scenario drivers are chosen with `CHOOSE(MATCH(Scenario, ...))`, so switching `B62` restates the forecast,
   statements and valuation together.
 - No macros, external links or add-ins; the file opens in Excel or LibreOffice Calc.

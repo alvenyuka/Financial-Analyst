@@ -11,9 +11,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.13"
           cache: pip
@@ -23,16 +23,18 @@ jobs:
       # arithmetic rather than training. So every push re-derives the income
       # statement, both sides of the balance sheet, the cash flow statement and
       # the cross-statement ties in Python, independently of the formulas that
-      # produced them, and separately checks that every line item on the
-      # Validation tab still matches the IS, BS or CFS cell it was copied from.
+      # produced them; checks that every line item on the Validation tab still
+      # matches the IS, BS or CFS cell it was copied from; and rebuilds the
+      # forecast working capital, balance sheet and DCF from the statements and
+      # the Assumptions inputs.
       #
       # The Validation tab inside the workbook reports "ALL CHECKS PASS", but
       # that tick is computed by the same spreadsheet whose correctness is in
       # question. This job is the outside opinion.
       #
       # What this job does NOT check, so the badge is not read as more than it
-      # is: the DCF, Ratios, Assumptions and Dashboard tabs. The valuation is
-      # unvalidated by anything here.
+      # is: the Ratios, Dashboard and Pivots tabs, and the recorded Bear and
+      # Bull prices.
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
@@ -45,5 +47,5 @@ jobs:
       - name: Test the validator against deliberately broken models
         run: python -m pytest
 
-      - name: Re-derive the statements' identities and trace every line to its source tab
+      - name: Re-derive the statements, trace every line to its source tab and rebuild the valuation
         run: python validate_model.py

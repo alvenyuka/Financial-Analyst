@@ -192,7 +192,7 @@ def test_a_statement_that_no_longer_matches_the_transcription_is_caught(workbook
     code, out = _run(wb)
     assert code == 1, out
     assert "SRC Products revenue" in out
-    assert "19 of 19 accounting identities" in out, (
+    assert "20 of 20 accounting identities" in out, (
         "the identities are expected to still pass; that is the point of the test"
     )
 
@@ -228,13 +228,12 @@ def test_missing_file_is_reported_clearly(tmp_path):
 
 
 def test_a_terminal_value_discounted_one_period_too_many_is_caught(workbook_copy):
-    """The defect the DCF used to carry: the Gordon value is as at the end of year 4,
-    so discounting it five periods understates enterprise value."""
+    """A Gordon value discounted one period too far understates enterprise value."""
     wb = workbook_copy()
     xlsx_surgery.set_cached_value(wb, "DCF", "B21", 1454766.0)
     code, out = _run(wb)
     assert code == 1, out
-    assert "FAIL  DCF terminal value, discounted from the end of year 4" in out
+    assert "FAIL  DCF terminal value, discounted from the FY29E year-end" in out
 
 
 def test_a_wrong_implied_price_is_caught(workbook_copy):
@@ -258,3 +257,32 @@ def test_the_run_reports_the_reverse_dcf(workbook_copy):
     code, out = _run(workbook_copy())
     assert code == 0, out
     assert "implies a WACC of" in out
+
+
+def test_cash_flow_reading_the_wrong_balance_sheet_year_is_caught(workbook_copy):
+    """The defect the model used to carry: the cash flow statement took each forecast
+    year's working-capital movement from the year before. The validator rebuilds the
+    movement from the balance sheet, so the workbook's own wiring cannot hide it."""
+    wb = workbook_copy()
+    xlsx_surgery.set_cached_value(wb, "CFS", "G13", -14603.0)
+    code, out = _run(wb)
+    assert code == 1, out
+    assert "FAIL  DCF change in working capital = movement in the balance-sheet lines" in out
+
+
+def test_a_forecast_balance_sheet_that_does_not_balance_is_caught(workbook_copy):
+    """With no balancing plug, a missing cash flow shows up as a balance-sheet gap."""
+    wb = workbook_copy()
+    xlsx_surgery.set_cached_value(wb, "BS", "I15", 1000.0)
+    code, out = _run(wb)
+    assert code == 1, out
+    assert "FAIL  DCF forecast balance sheet balances from its line items" in out
+
+
+def test_net_cash_from_the_wrong_year_is_caught(workbook_copy):
+    """Net cash has to come from the last balance sheet before the valuation date."""
+    wb = workbook_copy()
+    xlsx_surgery.set_cached_value(wb, "DCF", "B23", 50021.0)
+    code, out = _run(wb)
+    assert code == 1, out
+    assert "FAIL  DCF net cash (FY26E)" in out
