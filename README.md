@@ -65,7 +65,8 @@ flowchart LR
 
 1. **Historicals** transcribed from the 10-K filings and press releases, each line cited to a page.
 2. **Forecast** from segment revenue growth and gross margins, operating-expense growth, working-capital days
-   and capital returns, with no balancing plug: cash comes from the cash flow statement, switched between Bear, Base and Bull by one cell (`CHOOSE(MATCH(...))`).
+   and capital returns, with no balancing plug: cash comes from the cash flow statement. One cell switches every
+   driver between Bear, Base and Bull (`CHOOSE(MATCH(...))`).
 3. **Valuation.** Unlevered free cash flow discounted at a CAPM-based WACC (cost of equity 10.0% at beta 1.1,
    after-tax cost of debt 3.4%, 90/10 weights) from the 28 Sep 2026 valuation date to each fiscal year-end, a
    Gordon terminal value at the FY2029 year-end, two sensitivity grids and a football field comparing methods.
@@ -73,7 +74,8 @@ flowchart LR
 4. **Reverse DCF.** The validator solves for the discount rate at which the same cash flows justify the market
    price.
 5. **Independent validation.** `validate_model.py` re-derives the statement identities, traces each transcribed
-   line to its source cell, rebuilds working capital from the balance sheet and rebuilds the DCF; its tests break a copy of the model to prove each fault is caught.
+   line to its source cell, rebuilds working capital from the balance sheet and rebuilds the DCF; its tests break
+   a copy of the model to prove each fault is caught.
 
 ## Results
 
@@ -137,6 +139,7 @@ Apple/README.md                    model-specific assumptions and tabs
 validate_model.py                  independent validator (statements, valuation, reverse DCF)
 tests/                             fault-injection tests for the validator
 images/                            screenshots of the model
+docs/METHODOLOGY.md                full method and the review history
 ```
 
 ## How to run
