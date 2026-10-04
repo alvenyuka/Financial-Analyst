@@ -80,6 +80,7 @@ TOLERANCE = 1.0
 
 
 def _wrap(text: str, width: int):
+    """Split text into lines of at most `width` characters, breaking between words."""
     words, line, out = text.split(), "", []
     for w in words:
         if len(line) + len(w) + 1 > width:
@@ -113,6 +114,7 @@ class Check:
 
     @property
     def failures(self):
+        """Years where the expected and actual values differ by more than the tolerance, or one is missing."""
         out = []
         for year, exp, act in zip(self.years, self.expected, self.actual):
             if exp is None or act is None:
@@ -123,6 +125,7 @@ class Check:
 
     @property
     def passed(self) -> bool:
+        """True when no year fails."""
         return not self.failures
 
 
@@ -203,6 +206,12 @@ def check_year_headers(ws, header_rows, n_years=5):
 
 
 def build_checks(rows, years):
+    """The three-statement identities, each recomputed from its components in the Validation tab.
+
+    `rows` maps each Validation row label to its yearly values. Every check adds or
+    subtracts component rows and compares the result with the total the model
+    reports, for every year.
+    """
     def g(label):
         if label not in rows:
             raise KeyError(f"row not found in the Validation tab: {label!r}")
@@ -325,6 +334,7 @@ _SHEET_CELL = re.compile(r"(?P<sheet>[A-Za-z][A-Za-z0-9_ ]*)!(?P<col>[A-Z]+)(?P<
 
 
 def _col_index(letters: str) -> int:
+    """Column number of a column letter reference (A = 1, Z = 26, AA = 27)."""
     n = 0
     for ch in letters:
         n = n * 26 + (ord(ch) - 64)
@@ -552,6 +562,7 @@ def build_dcf_checks(wb):
 
 
 def main(argv):
+    """Load the workbook, run every check group, print the report and return the exit code (0 when all pass)."""
     path = Path(argv[1]) if len(argv) > 1 else DEFAULT_MODEL
     if not path.exists():
         sys.exit(f"workbook not found: {path}")
