@@ -120,7 +120,8 @@ class Check:
             if exp is None or act is None:
                 out.append((year, exp, act, "missing value"))
             elif abs(exp - act) > self.tol:
-                out.append((year, exp, act, f"differs by {exp - act:,.1f}"))
+                gap = f"{exp - act:,.1f}" if self.tol >= 1 else f"{exp - act:+.6f}"
+                out.append((year, exp, act, f"differs by {gap}"))
         return out
 
     @property
@@ -435,6 +436,73 @@ def build_transcription_checks(wb_values, links, years):
     return checks
 
 
+RATIO_TOL = 1e-5  # 0.001 percentage points: covers the $1M rounding slack, catches any real error
+
+
+def build_ratio_checks(wb_values, rows, years):
+    """The Ratios tab, rebuilt from the Validation-tab line items rather than read from its formulas.
+
+    The line items are the ones already traced to the filings (the SRC checks), so a
+    ratio that passes here rests on the 10-K figures, not on whichever statement cell
+    the Ratios formula happens to point at. Growth rates start in the second year.
+    """
+    ws = wb_values["Ratios"]
+    tax = wb_values["Assumptions"]["B50"].value
+    reported = read_rows(ws)
+
+    def g(label):
+        if label == "_debt":
+            return debt
+        if label not in rows:
+            raise KeyError(f"row not found in the Validation tab: {label!r}")
+        return rows[label]
+
+    def per_year(fn, *labels):
+        cols = [g(label) for label in labels]
+        return [None if any(v is None for v in vals) else fn(*vals) for vals in zip(*cols)]
+
+    def growth(label):
+        v = g(label)
+        return [None] + [None if a is None or b is None else b / a - 1 for a, b in zip(v, v[1:])]
+
+    debt = None  # total debt, filled in next and read through g("_debt")
+    debt = per_year(lambda cp, cur, lt: cp + cur + lt,
+                    "Commercial paper", "Term debt (current)", "Long-term debt (non-current)")
+    revenue, net_income = "Total revenue (calc)", "Net income (calc)"
+    derived = {
+        "Gross margin %": per_year(lambda gp, r: gp / r, "Gross profit (calc)", revenue),
+        "Operating margin %": per_year(lambda oi, r: oi / r, "Operating income (calc)", revenue),
+        "Net margin %": per_year(lambda ni, r: ni / r, net_income, revenue),
+        "EBITDA margin %": per_year(lambda oi, da, r: (oi + da) / r,
+                                    "Operating income (calc)", "Depreciation & amortization", revenue),
+        "Revenue growth %": growth(revenue),
+        "Operating income growth %": growth("Operating income (calc)"),
+        "Net income growth %": growth(net_income),
+        "Return on assets (ROA)": per_year(lambda ni, ta: ni / ta, net_income, "Total assets"),
+        "Return on equity (ROE)": per_year(lambda ni, eq: ni / eq, net_income, "Shareholders' equity"),
+        "Return on invested capital": per_year(lambda oi, d, eq: oi * (1 - tax) / (d + eq),
+                                               "Operating income (calc)", "_debt", "Shareholders' equity"),
+        "Debt / Equity": per_year(lambda d, eq: d / eq, "_debt", "Shareholders' equity"),
+        "Debt / Total capital": per_year(lambda d, eq: d / (d + eq), "_debt", "Shareholders' equity"),
+        "Current ratio": per_year(lambda ca, cl: ca / cl, "Total current assets", "Total current liabilities"),
+        "Net debt ($M)": per_year(lambda d, c, ms1, ms2: d - c - ms1 - ms2, "_debt", "Cash & equivalents",
+                                  "Marketable securities (current)", "Marketable securities (non-curr)"),
+        "Operating cash flow ($M)": g("Cash from operations"),
+        "Free cash flow ($M)": g("Free cash flow (CFO - CapEx)"),
+        "FCF margin %": per_year(lambda f, r: f / r, "Free cash flow (CFO - CapEx)", revenue),
+        "FCF / Net income": per_year(lambda f, ni: f / ni, "Free cash flow (CFO - CapEx)", net_income),
+        "CapEx / Revenue": per_year(lambda c, r: -c / r, "Capital expenditures", revenue),
+    }
+    checks = []
+    for label, values in derived.items():
+        if label not in reported:
+            raise KeyError(f"row not found in the Ratios tab: {label!r}")
+        start = 1 if values[0] is None else 0  # growth rates have no first year
+        tol = TOLERANCE if label.endswith("($M)") else RATIO_TOL
+        checks.append(Check(f"RAT {label}", values[start:], reported[label][start:], years[start:], tol=tol))
+    return checks
+
+
 def _dcf_price(fcf, periods, wacc, g, net_cash, shares):
     """Per-share value: cash flows from years ending after the valuation date, plus a
     Gordon terminal value at the last forecast year-end."""
@@ -595,7 +663,8 @@ def main(argv):
     print("-" * 72)
 
     dcf_checks, dcf = build_dcf_checks(wb)
-    checks = build_checks(rows, years) + build_transcription_checks(wb, links, years) + dcf_checks
+    ratio_checks = build_ratio_checks(wb, rows, years)
+    checks = build_checks(rows, years) + build_transcription_checks(wb, links, years) + dcf_checks + ratio_checks
     failed = 0
     for check in checks:
         if check.passed:
@@ -615,7 +684,9 @@ def main(argv):
 
     hard = [c for c in checks if not c.advisory]
     notes = [c for c in checks if c.advisory and not c.passed]
-    identities = [c for c in hard if not c.label.startswith(("SRC ", "DCF "))]
+    identities = [c for c in hard if not c.label.startswith(("SRC ", "DCF ", "RAT "))]
+    ratios = [c for c in hard if c.label.startswith("RAT ")]
+    ratio_failures = sum(1 for c in ratios if not c.passed)
     sources = [c for c in hard if c.label.startswith("SRC ")]
     valuation = [c for c in hard if c.label.startswith("DCF ")]
     valuation_failures = sum(1 for c in valuation if not c.passed)
@@ -630,6 +701,8 @@ def main(argv):
           f"across {len(years)} years each.")
     print(f"{len(valuation) - valuation_failures} of {len(valuation)} valuation figures re-derived "
           f"from the forecast statements and inputs ({dcf['scenario']} scenario).")
+    print(f"{len(ratios) - ratio_failures} of {len(ratios)} Ratios-tab rows rebuilt from the traced line items "
+          f"and matched in every year.")
     print(f"DCF: ${dcf['price']:,.2f} a share at WACC {dcf['wacc']:.2%} and g {dcf['g']:.1%}, against "
           f"${dcf['price_ref']:,.2f}. The reference price implies a WACC of {dcf['implied_wacc']:.2%} "
           f"on the same cash flows. Terminal value is {dcf['tv_share']:.0%} of enterprise value.")
@@ -648,8 +721,8 @@ def main(argv):
         return 1
     print("Every total was recomputed outside the spreadsheet and agrees, every line "
           "item traces to the statement it came from, and the valuation rebuilds.")
-    print("Not covered: the Ratios, Dashboard and Pivots tabs; the Bear and Bull "
-          "prices are printed as recorded.")
+    print("Not covered: the Dashboard and Pivots tabs; the Bear and Bull prices are "
+          "printed as recorded.")
     return 0
 
 

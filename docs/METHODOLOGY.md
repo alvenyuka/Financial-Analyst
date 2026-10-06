@@ -125,6 +125,6 @@ terminal value discounted one period too many.
 - [x] Apple three-statement model and DCF, every historical line traced to its filing
 - [x] Independent validator for the statements and the valuation, with fault-injection tests
 - [x] Review fixes: cash flow timing, net cash year, FY2025 lines, no balancing plug, valuation date
-- [ ] Extend the validator to the Ratios tab
+- [x] Extend the validator to the Ratios tab (19 rows, rebuilt from the traced line items)
 - [ ] Safaricom (SCOM), Nairobi Securities Exchange
 - [ ] Equity Group Holdings (EQTY), Nairobi Securities Exchange

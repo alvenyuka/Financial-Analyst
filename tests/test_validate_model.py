@@ -286,3 +286,31 @@ def test_net_cash_from_the_wrong_year_is_caught(workbook_copy):
     code, out = _run(wb)
     assert code == 1, out
     assert "FAIL  DCF net cash (FY26E)" in out
+
+
+# --------------------------------------------------------------------------
+# The Ratios tab
+# --------------------------------------------------------------------------
+
+def test_the_run_reports_every_ratio(workbook_copy):
+    code, out = _run(workbook_copy())
+    assert code == 0, out
+    assert "19 of 19 Ratios-tab rows rebuilt" in out
+
+
+def test_a_ratio_on_the_wrong_denominator_is_caught(workbook_copy):
+    """FY2021 gross margin computed on cost of sales instead of revenue."""
+    wb = workbook_copy()
+    xlsx_surgery.set_cached_value(wb, "Ratios", "B7", 152836.0 / 212981.0)
+    code, out = _run(wb)
+    assert code == 1, out
+    assert "FAIL  RAT Gross margin %" in out
+
+
+def test_roic_without_the_tax_adjustment_is_caught(workbook_copy):
+    """FY2025 ROIC left pre-tax is 1 / (1 - 15%) times too high."""
+    wb = workbook_copy()
+    xlsx_surgery.set_cached_value(wb, "Ratios", "F20", 0.6560270317303788 / 0.85)
+    code, out = _run(wb)
+    assert code == 1, out
+    assert "FAIL  RAT Return on invested capital" in out

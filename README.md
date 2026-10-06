@@ -93,7 +93,10 @@ is checked from outside. `validate_model.py` reads the raw cells and recomputes:
 | Accounting identities reconciled | 20 of 20 |
 | Transcribed line items traced to source cells | 56 of 56 |
 | Valuation figures rebuilt independently | 23 of 23 |
+| Ratios rebuilt from the traced line items, every year | 19 of 19 |
 
+The ratios (margins, growth, returns, leverage, cash conversion) are recomputed from the same line items the
+filings were traced to, not read from the Ratios tab's own formulas, so a ratio pointing at the wrong cell fails.
 Its tests break a copy of the model one cell at a time to prove each fault is caught. That outside check has
 already paid for itself: an independent review found the cash flow statement reading each forecast year's
 working-capital movement from the year before, and net cash taken from the wrong year, while the workbook's own
@@ -125,7 +128,7 @@ the Assumptions sheet.
 Apple/Apple_Financial_Model.xlsx   the model: assumptions, statements, DCF, validation tab
 Apple/Source_filings/              the 10-K and press-release PDFs behind the historicals
 Apple/README.md                    model-specific assumptions and tabs
-validate_model.py                  independent validator (statements, valuation, reverse DCF)
+validate_model.py                  independent validator (statements, ratios, valuation, reverse DCF)
 tests/                             fault-injection tests for the validator
 images/                            screenshots of the model
 docs/METHODOLOGY.md                full method and the review history
