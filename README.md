@@ -1,10 +1,12 @@
-# Financial-Analyst: company valuation from SEC filings, checked by an independent program
+# Apple Valuation, Independently Checked
 
-**A three-statement model and DCF of Apple, built in Excel from five years of SEC 10-K filings and rebuilt line
-by line by a separate Python validator. The model values the shares at $139.50 against a market price of
-$338.40; to justify that price, investors must accept about a 5.3% return on Apple's cash flows, against the
-9.3% a standard cost-of-capital estimate gives. The validator reconciles 20 of 20 accounting identities, 56 of
-56 transcribed line items and 23 of 23 valuation figures, and 20 tests, 14 of them injecting a fault, prove it catches errors.**
+The DCF gives $139.50 a share against a $338.40 price; a separate program rebuilds every figure.
+
+| At a glance | |
+|---|---|
+| **Who decides** | An investment or credit committee that needs a value it can defend. |
+| **Result** | Base case $139.50 a share against a $338.40 price: the price implies about a 5.3% return on Apple's cash flows, against a 9.3% cost of capital. |
+| **Proof** | Five years of SEC 10-K filings; a Python validator reconciles 20 of 20 accounting identities, 56 of 56 line items and 23 of 23 valuation figures; 20 tests, 14 of them injecting a fault. |
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Excel](https://img.shields.io/badge/Excel-LibreOffice%20compatible-217346?logo=microsoftexcel&logoColor=white)](https://www.microsoft.com/en-us/microsoft-365/excel)
@@ -56,6 +58,8 @@ flowchart LR
 | Tests and CI | pytest with fault injection, GitHub Actions | Python 3.13 in CI |
 
 ## Results
+
+A three-statement model and DCF of Apple, built in Excel from five years of SEC 10-K filings and rebuilt line by line by a separate Python validator. The model values the shares at $139.50 against a market price of $338.40; to justify that price, investors must accept about a 5.3% return on Apple's cash flows, against the 9.3% a standard cost-of-capital estimate gives. The validator reconciles 20 of 20 accounting identities, 56 of 56 transcribed line items and 23 of 23 valuation figures, and 20 tests, 14 of them injecting a fault, prove it catches errors.
 
 - Five fiscal years of income statement, balance sheet and cash flow statement (FY2021 to FY2025), four
   forecast years, three scenarios.
