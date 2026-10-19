@@ -78,6 +78,24 @@ DEFAULT_MODEL = Path(__file__).parent / "Apple" / "Apple_Financial_Model.xlsx"
 # hundreds of billions is about four parts in a million.
 TOLERANCE = 1.0
 
+# Cells on the Assumptions tab that the ratio and DCF rebuilds read. Several are
+# formulas driven by the scenario switch in B62, so the Base-case value is only
+# given as an example.
+RISK_FREE_RATE = "B45"           # risk-free rate (Base case 4.5%)
+EQUITY_RISK_PREMIUM = "B46"      # equity risk premium (Base case 5.0%)
+BETA = "B47"                     # Apple's beta (Base case 1.1)
+PRE_TAX_COST_OF_DEBT = "B49"     # pre-tax cost of debt (Base case 4.0%)
+WACC_TAX_RATE = "B50"            # tax rate used in the WACC (Base case 15%; a formula, =G25)
+TARGET_DEBT_TO_CAPITAL = "B52"   # debt share of the capital structure; equity is the rest (Base case 10%)
+WACC_CELL = "B54"                # the WACC the workbook calculated, which the rebuild is checked against
+TERMINAL_GROWTH = "B55"          # terminal growth rate g (Base case 2.5%)
+DILUTED_SHARES = "B58"           # diluted shares outstanding, in millions
+REFERENCE_PRICE = "B59"          # share price on the valuation date
+VALUATION_DATE = "B60"           # date of that price; cash flows are discounted back to it
+ACTIVE_SCENARIO = "B62"          # Base, Bear or Bull: the scenario switch
+PE_MID_MULTIPLE = "C97"          # middle P/E multiple of the football field
+EV_EBITDA_MID_MULTIPLE = "C98"   # middle EV/EBITDA multiple of the football field
+
 
 def _wrap(text: str, width: int):
     """Split text into lines of at most `width` characters, breaking between words."""
@@ -192,10 +210,12 @@ def check_year_headers(ws, header_rows, n_years=5):
     a different set, the comparisons would still line up positionally and mean
     nothing.
     """
-    headers = {
-        name: tuple(ws.cell(r, c).value for c in range(2, 2 + n_years))
-        for name, r in header_rows.items()
-    }
+    headers = {}
+    for name, r in header_rows.items():
+        years_in_header = []
+        for c in range(2, 2 + n_years):
+            years_in_header.append(ws.cell(r, c).value)
+        headers[name] = tuple(years_in_header)
     distinct = set(headers.values())
     if len(distinct) > 1:
         detail = "\n".join(f"    {name}: {list(cols)}" for name, cols in headers.items())
@@ -203,7 +223,173 @@ def check_year_headers(ws, header_rows, n_years=5):
             "The statements are not laid out over the same years, so a "
             "column-by-column comparison would be meaningless:\n" + detail
         )
-    return list(next(iter(distinct)))
+    return list(distinct.pop())
+
+
+def get_row(rows, label):
+    """Return one Validation row's yearly values, or fail loudly if the label is gone."""
+    if label not in rows:
+        raise KeyError(f"row not found in the Validation tab: {label!r}")
+    return rows[label]
+
+
+# The next three work on lists of yearly values. A year where any input is
+# missing (None) gives None, so the check reports "missing value" for that year
+# instead of crashing on None + number.
+
+def add_lists(*lists):
+    """Add the lists together, year by year."""
+    totals = []
+    for i in range(len(lists[0])):
+        values = [one_list[i] for one_list in lists]
+        if None in values:
+            totals.append(None)
+        else:
+            totals.append(sum(values))
+    return totals
+
+
+def subtract_lists(first, *others):
+    """first minus the sum of the other lists, year by year."""
+    results = []
+    for i in range(len(first)):
+        start = first[i]
+        to_take_off = [one_list[i] for one_list in others]
+        if start is None or None in to_take_off:
+            results.append(None)
+        else:
+            results.append(start - sum(to_take_off))
+    return results
+
+
+def divide_lists(top, bottom):
+    """top divided by bottom, year by year."""
+    results = []
+    for i in range(len(top)):
+        if top[i] is None or bottom[i] is None:
+            results.append(None)
+        else:
+            results.append(top[i] / bottom[i])
+    return results
+
+
+def add_rows(rows, *labels):
+    """Add the Validation rows with these labels, year by year."""
+    return add_lists(*[get_row(rows, label) for label in labels])
+
+
+def subtract_rows(rows, first_label, *other_labels):
+    """The first row minus the other rows, year by year."""
+    others = [get_row(rows, label) for label in other_labels]
+    return subtract_lists(get_row(rows, first_label), *others)
+
+
+def income_statement_checks(rows, years):
+    """Each income statement line rebuilt from the line above it."""
+    return [
+        Check("IS  revenue = products + services",
+              add_rows(rows, "Products revenue", "Services revenue"),
+              get_row(rows, "Total revenue (calc)"), years),
+        Check("IS  cost of sales = products + services",
+              add_rows(rows, "Cost of products", "Cost of services"),
+              get_row(rows, "Total cost of sales"), years),
+        Check("IS  gross profit = revenue - cost of sales",
+              subtract_rows(rows, "Total revenue (calc)", "Total cost of sales"),
+              get_row(rows, "Gross profit (calc)"), years),
+        Check("IS  opex = R&D + SG&A",
+              add_rows(rows, "R&D expense", "SG&A expense"),
+              get_row(rows, "Total operating expenses"), years),
+        Check("IS  operating income = gross profit - opex",
+              subtract_rows(rows, "Gross profit (calc)", "Total operating expenses"),
+              get_row(rows, "Operating income (calc)"), years),
+        Check("IS  pre-tax = operating income + other",
+              add_rows(rows, "Operating income (calc)", "Other income/(expense)"),
+              get_row(rows, "Pre-tax income (calc)"), years),
+        Check("IS  net income = pre-tax - tax",
+              subtract_rows(rows, "Pre-tax income (calc)", "Income tax expense"),
+              get_row(rows, "Net income (calc)"), years),
+    ]
+
+
+def balance_sheet_checks(rows, years):
+    """Each balance sheet subtotal re-added, ending with assets = liabilities + equity."""
+    return [
+        Check("BS  current assets sum to the subtotal",
+              add_rows(rows, "Cash & equivalents", "Marketable securities (current)",
+                       "Accounts receivable, net", "Inventory",
+                       "Vendor non-trade receivables", "Other current assets"),
+              get_row(rows, "Total current assets"), years),
+        Check("BS  total assets = current + PP&E + other non-current",
+              add_rows(rows, "Total current assets", "Marketable securities (non-curr)",
+                       "Property, plant & equipment, net", "Other non-current assets"),
+              get_row(rows, "Total assets"), years),
+        Check("BS  current liabilities sum to the subtotal",
+              add_rows(rows, "Accounts payable", "Other current liabilities", "Deferred revenue",
+                       "Commercial paper", "Term debt (current)"),
+              get_row(rows, "Total current liabilities"), years),
+        Check("BS  total liabilities = current + LT debt + other non-current",
+              add_rows(rows, "Total current liabilities", "Long-term debt (non-current)",
+                       "Other non-current liabilities"),
+              get_row(rows, "Total liabilities"), years),
+        Check("BS  equity = common stock + retained earnings + other comprehensive income",
+              add_rows(rows, "Common stock and APIC", "Retained earnings (deficit)",
+                       "Accumulated OCI (loss)"),
+              get_row(rows, "Shareholders' equity"), years),
+        Check("BS  liabilities + equity subtotal",
+              add_rows(rows, "Total liabilities", "Shareholders' equity"),
+              get_row(rows, "Total liabilities + equity"), years),
+        Check("BS  THE identity: assets = liabilities + equity",
+              get_row(rows, "Total assets"), get_row(rows, "Total liabilities + equity"), years),
+    ]
+
+
+def cash_flow_checks(rows, years):
+    """Each cash flow section re-added, and the sections added into the net change in cash."""
+    return [
+        Check("CF  investing = capex + other investing",
+              add_rows(rows, "Capital expenditures", "Other investing"),
+              get_row(rows, "Cash from investing"), years),
+        Check("CF  financing = dividends + buybacks + other",
+              add_rows(rows, "Dividends paid", "Share repurchases", "Other financing"),
+              get_row(rows, "Cash from financing"), years),
+        Check("CF  net change = operations + investing + financing",
+              add_rows(rows, "Cash from operations", "Cash from investing", "Cash from financing"),
+              get_row(rows, "Net change in cash"), years),
+        Check("CF  ending cash = beginning cash + net change",
+              add_rows(rows, "Beginning cash", "Net change in cash"),
+              get_row(rows, "Ending cash"), years),
+        Check("CF  free cash flow = operations - capex",
+              add_rows(rows, "Cash from operations", "Capital expenditures"),
+              get_row(rows, "Free cash flow (CFO - CapEx)"), years),
+    ]
+
+
+def cross_statement_checks(rows, years):
+    """The ties between statements, which is where a three-statement model usually breaks."""
+    ending_cash = get_row(rows, "Ending cash")
+    beginning_cash = get_row(rows, "Beginning cash")
+
+    cash_tie = Check(
+        "TIE ending cash on the CFS = cash on the BS",
+        ending_cash, get_row(rows, "Cash & equivalents"), years,
+        note=(
+            "Expected for FY21 to FY23: those cash flow statements reconcile "
+            "to cash, cash equivalents and restricted cash, while the balance "
+            "sheet line excludes restricted cash, so the gaps (989, 1,331 and "
+            "772) are the restricted cash. From FY24 Apple's statements agree."
+        ),
+        advisory=True)
+
+    # This year's beginning cash is last year's ending cash. A break here means
+    # the statements are not actually linked, only arranged to look like they are.
+    # There is one fewer pair than there are years, so the labels are built by hand.
+    year_pairs = []
+    for i in range(len(years) - 1):
+        year_pairs.append(f"{years[i]} to {years[i + 1]}")
+    roll_forward = Check("TIE beginning cash = prior year ending cash",
+                         ending_cash[:-1], beginning_cash[1:], year_pairs)
+
+    return [cash_tie, roll_forward]
 
 
 def build_checks(rows, years):
@@ -213,105 +399,11 @@ def build_checks(rows, years):
     subtracts component rows and compares the result with the total the model
     reports, for every year.
     """
-    def g(label):
-        if label not in rows:
-            raise KeyError(f"row not found in the Validation tab: {label!r}")
-        return rows[label]
-
-    def add(*labels):
-        cols = [g(l) for l in labels]
-        return [
-            None if any(v is None for v in vals) else sum(vals)
-            for vals in zip(*cols)
-        ]
-
-    def sub(a, *rest):
-        base = g(a)
-        cols = [g(l) for l in rest]
-        return [
-            None if (b is None or any(v is None for v in vals)) else b - sum(vals)
-            for b, *vals in zip(base, *cols)
-        ]
-
-    checks = [
-        # ---- income statement -------------------------------------------
-        Check("IS  revenue = products + services",
-              add("Products revenue", "Services revenue"), g("Total revenue (calc)"), years),
-        Check("IS  cost of sales = products + services",
-              add("Cost of products", "Cost of services"), g("Total cost of sales"), years),
-        Check("IS  gross profit = revenue - cost of sales",
-              sub("Total revenue (calc)", "Total cost of sales"), g("Gross profit (calc)"), years),
-        Check("IS  opex = R&D + SG&A",
-              add("R&D expense", "SG&A expense"), g("Total operating expenses"), years),
-        Check("IS  operating income = gross profit - opex",
-              sub("Gross profit (calc)", "Total operating expenses"), g("Operating income (calc)"), years),
-        Check("IS  pre-tax = operating income + other",
-              add("Operating income (calc)", "Other income/(expense)"), g("Pre-tax income (calc)"), years),
-        Check("IS  net income = pre-tax - tax",
-              sub("Pre-tax income (calc)", "Income tax expense"), g("Net income (calc)"), years),
-
-        # ---- balance sheet ----------------------------------------------
-        Check("BS  current assets sum to the subtotal",
-              add("Cash & equivalents", "Marketable securities (current)", "Accounts receivable, net",
-                  "Inventory", "Vendor non-trade receivables", "Other current assets"),
-              g("Total current assets"), years),
-        Check("BS  total assets = current + PP&E + other non-current",
-              add("Total current assets", "Marketable securities (non-curr)",
-                  "Property, plant & equipment, net", "Other non-current assets"),
-              g("Total assets"), years),
-        Check("BS  current liabilities sum to the subtotal",
-              add("Accounts payable", "Other current liabilities", "Deferred revenue",
-                  "Commercial paper", "Term debt (current)"),
-              g("Total current liabilities"), years),
-        Check("BS  total liabilities = current + LT debt + other non-current",
-              add("Total current liabilities", "Long-term debt (non-current)",
-                  "Other non-current liabilities"),
-              g("Total liabilities"), years),
-        Check("BS  equity = common stock + retained earnings + other comprehensive income",
-              add("Common stock and APIC", "Retained earnings (deficit)", "Accumulated OCI (loss)"),
-              g("Shareholders' equity"), years),
-        Check("BS  liabilities + equity subtotal",
-              add("Total liabilities", "Shareholders' equity"),
-              g("Total liabilities + equity"), years),
-        Check("BS  THE identity: assets = liabilities + equity",
-              g("Total assets"), g("Total liabilities + equity"), years),
-
-        # ---- cash flow statement -----------------------------------------
-        Check("CF  investing = capex + other investing",
-              add("Capital expenditures", "Other investing"), g("Cash from investing"), years),
-        Check("CF  financing = dividends + buybacks + other",
-              add("Dividends paid", "Share repurchases", "Other financing"),
-              g("Cash from financing"), years),
-        Check("CF  net change = operations + investing + financing",
-              add("Cash from operations", "Cash from investing", "Cash from financing"),
-              g("Net change in cash"), years),
-        Check("CF  ending cash = beginning cash + net change",
-              add("Beginning cash", "Net change in cash"), g("Ending cash"), years),
-        Check("CF  free cash flow = operations - capex",
-              add("Cash from operations", "Capital expenditures"),
-              g("Free cash flow (CFO - CapEx)"), years),
-
-        # ---- cross-statement ---------------------------------------------
-        Check("TIE ending cash on the CFS = cash on the BS",
-              g("Ending cash"), g("Cash & equivalents"), years,
-              note=(
-                  "Expected for FY21 to FY23: those cash flow statements reconcile "
-                  "to cash, cash equivalents and restricted cash, while the balance "
-                  "sheet line excludes restricted cash, so the gaps (989, 1,331 and "
-                  "772) are the restricted cash. From FY24 Apple's statements agree."
-              ),
-              advisory=True),
-    ]
-
-    # The roll-forward tie has to be built by hand: this year's beginning cash is
-    # last year's ending cash. A break here means the statements are not actually
-    # linked, only arranged to look like they are.
-    ending = g("Ending cash")
-    beginning = g("Beginning cash")
-    checks.append(
-        Check("TIE beginning cash = prior year ending cash",
-              ending[:-1], beginning[1:], [f"{a} to {b}" for a, b in zip(years, years[1:])])
-    )
+    checks = []
+    checks += income_statement_checks(rows, years)
+    checks += balance_sheet_checks(rows, years)
+    checks += cash_flow_checks(rows, years)
+    checks += cross_statement_checks(rows, years)
     return checks
 
 
@@ -407,7 +499,8 @@ def build_transcription_checks(wb_values, links, years):
 
     for _, (label, per_year) in sorted(links.items()):
         transcribed, derived = [], []
-        for (vrow, vcol), sources in per_year:
+        for year_cell, sources in per_year:
+            vrow, vcol = year_cell
             value = validation.cell(vrow, vcol).value
             transcribed.append(value if isinstance(value, (int, float)) else None)
 
@@ -423,7 +516,11 @@ def build_transcription_checks(wb_values, links, years):
                 total += cell
             derived.append(total)
 
-        sheets = sorted({sheet for _, sources in per_year for sheet, _, _ in sources})
+        sheet_names = set()
+        for _, sources in per_year:
+            for source in sources:
+                sheet_names.add(source[0])
+        sheets = sorted(sheet_names)
         checks.append(
             Check(f"SRC {label} = {'/'.join(sheets)}", derived, transcribed, years,
                   note=(
@@ -439,6 +536,18 @@ def build_transcription_checks(wb_values, links, years):
 RATIO_TOL = 1e-5  # 0.001 percentage points: covers the $1M rounding slack, catches any real error
 
 
+def growth_rates(values):
+    """Year-on-year growth. The first year has nothing before it, so it is None."""
+    rates = [None]
+    for i in range(1, len(values)):
+        last_year, this_year = values[i - 1], values[i]
+        if last_year is None or this_year is None:
+            rates.append(None)
+        else:
+            rates.append(this_year / last_year - 1)
+    return rates
+
+
 def build_ratio_checks(wb_values, rows, years):
     """The Ratios tab, rebuilt from the Validation-tab line items rather than read from its formulas.
 
@@ -446,67 +555,84 @@ def build_ratio_checks(wb_values, rows, years):
     ratio that passes here rests on the 10-K figures, not on whichever statement cell
     the Ratios formula happens to point at. Growth rates start in the second year.
     """
-    ws = wb_values["Ratios"]
-    tax = wb_values["Assumptions"]["B50"].value
-    reported = read_rows(ws)
+    ratios_sheet = wb_values["Ratios"]
+    tax_rate = wb_values["Assumptions"][WACC_TAX_RATE].value
+    reported = read_rows(ratios_sheet)
 
-    def g(label):
-        if label == "_debt":
-            return debt
-        if label not in rows:
-            raise KeyError(f"row not found in the Validation tab: {label!r}")
-        return rows[label]
+    # The line items, pulled out once under short names.
+    revenue = get_row(rows, "Total revenue (calc)")
+    gross_profit = get_row(rows, "Gross profit (calc)")
+    operating_income = get_row(rows, "Operating income (calc)")
+    net_income = get_row(rows, "Net income (calc)")
+    depreciation = get_row(rows, "Depreciation & amortization")
+    total_assets = get_row(rows, "Total assets")
+    equity = get_row(rows, "Shareholders' equity")
+    current_assets = get_row(rows, "Total current assets")
+    current_liabilities = get_row(rows, "Total current liabilities")
+    cash = get_row(rows, "Cash & equivalents")
+    securities_current = get_row(rows, "Marketable securities (current)")
+    securities_non_current = get_row(rows, "Marketable securities (non-curr)")
+    operating_cash_flow = get_row(rows, "Cash from operations")
+    free_cash_flow = get_row(rows, "Free cash flow (CFO - CapEx)")
+    capex = get_row(rows, "Capital expenditures")
 
-    def per_year(fn, *labels):
-        cols = [g(label) for label in labels]
-        return [None if any(v is None for v in vals) else fn(*vals) for vals in zip(*cols)]
+    # Total debt, and the combinations that several ratios share.
+    debt = add_rows(rows, "Commercial paper", "Term debt (current)", "Long-term debt (non-current)")
+    debt_plus_equity = add_lists(debt, equity)
+    ebitda = add_lists(operating_income, depreciation)
+    net_debt = subtract_lists(debt, cash)
+    net_debt = subtract_lists(net_debt, securities_current)
+    net_debt = subtract_lists(net_debt, securities_non_current)
 
-    def growth(label):
-        v = g(label)
-        return [None] + [None if a is None or b is None else b / a - 1 for a, b in zip(v, v[1:])]
+    after_tax_operating_income = []
+    for value in operating_income:
+        after_tax_operating_income.append(None if value is None else value * (1 - tax_rate))
 
-    debt = None  # total debt, filled in next and read through g("_debt")
-    debt = per_year(lambda cp, cur, lt: cp + cur + lt,
-                    "Commercial paper", "Term debt (current)", "Long-term debt (non-current)")
-    revenue, net_income = "Total revenue (calc)", "Net income (calc)"
+    # CapEx is stored as a negative cash outflow; the ratio is quoted as a positive share.
+    capex_as_positive = []
+    for value in capex:
+        capex_as_positive.append(None if value is None else -value)
+
     derived = {
-        "Gross margin %": per_year(lambda gp, r: gp / r, "Gross profit (calc)", revenue),
-        "Operating margin %": per_year(lambda oi, r: oi / r, "Operating income (calc)", revenue),
-        "Net margin %": per_year(lambda ni, r: ni / r, net_income, revenue),
-        "EBITDA margin %": per_year(lambda oi, da, r: (oi + da) / r,
-                                    "Operating income (calc)", "Depreciation & amortization", revenue),
-        "Revenue growth %": growth(revenue),
-        "Operating income growth %": growth("Operating income (calc)"),
-        "Net income growth %": growth(net_income),
-        "Return on assets (ROA)": per_year(lambda ni, ta: ni / ta, net_income, "Total assets"),
-        "Return on equity (ROE)": per_year(lambda ni, eq: ni / eq, net_income, "Shareholders' equity"),
-        "Return on invested capital": per_year(lambda oi, d, eq: oi * (1 - tax) / (d + eq),
-                                               "Operating income (calc)", "_debt", "Shareholders' equity"),
-        "Debt / Equity": per_year(lambda d, eq: d / eq, "_debt", "Shareholders' equity"),
-        "Debt / Total capital": per_year(lambda d, eq: d / (d + eq), "_debt", "Shareholders' equity"),
-        "Current ratio": per_year(lambda ca, cl: ca / cl, "Total current assets", "Total current liabilities"),
-        "Net debt ($M)": per_year(lambda d, c, ms1, ms2: d - c - ms1 - ms2, "_debt", "Cash & equivalents",
-                                  "Marketable securities (current)", "Marketable securities (non-curr)"),
-        "Operating cash flow ($M)": g("Cash from operations"),
-        "Free cash flow ($M)": g("Free cash flow (CFO - CapEx)"),
-        "FCF margin %": per_year(lambda f, r: f / r, "Free cash flow (CFO - CapEx)", revenue),
-        "FCF / Net income": per_year(lambda f, ni: f / ni, "Free cash flow (CFO - CapEx)", net_income),
-        "CapEx / Revenue": per_year(lambda c, r: -c / r, "Capital expenditures", revenue),
+        "Gross margin %": divide_lists(gross_profit, revenue),
+        "Operating margin %": divide_lists(operating_income, revenue),
+        "Net margin %": divide_lists(net_income, revenue),
+        "EBITDA margin %": divide_lists(ebitda, revenue),
+        "Revenue growth %": growth_rates(revenue),
+        "Operating income growth %": growth_rates(operating_income),
+        "Net income growth %": growth_rates(net_income),
+        "Return on assets (ROA)": divide_lists(net_income, total_assets),
+        "Return on equity (ROE)": divide_lists(net_income, equity),
+        "Return on invested capital": divide_lists(after_tax_operating_income, debt_plus_equity),
+        "Debt / Equity": divide_lists(debt, equity),
+        "Debt / Total capital": divide_lists(debt, debt_plus_equity),
+        "Current ratio": divide_lists(current_assets, current_liabilities),
+        "Net debt ($M)": net_debt,
+        "Operating cash flow ($M)": operating_cash_flow,
+        "Free cash flow ($M)": free_cash_flow,
+        "FCF margin %": divide_lists(free_cash_flow, revenue),
+        "FCF / Net income": divide_lists(free_cash_flow, net_income),
+        "CapEx / Revenue": divide_lists(capex_as_positive, revenue),
     }
+
     checks = []
     for label, values in derived.items():
         if label not in reported:
             raise KeyError(f"row not found in the Ratios tab: {label!r}")
         start = 1 if values[0] is None else 0  # growth rates have no first year
         tol = TOLERANCE if label.endswith("($M)") else RATIO_TOL
-        checks.append(Check(f"RAT {label}", values[start:], reported[label][start:], years[start:], tol=tol))
+        checks.append(Check(f"RAT {label}", values[start:], reported[label][start:],
+                            years[start:], tol=tol))
     return checks
 
 
 def _dcf_price(fcf, periods, wacc, g, net_cash, shares):
     """Per-share value: cash flows from years ending after the valuation date, plus a
     Gordon terminal value at the last forecast year-end."""
-    pv = sum(f / (1 + wacc) ** t for f, t in zip(fcf, periods) if t > 0)
+    pv = 0
+    for cash_flow, t in zip(fcf, periods):
+        if t > 0:  # a year that ended before the valuation date is already in net cash
+            pv += cash_flow / (1 + wacc) ** t
     tv = fcf[-1] * (1 + g) / (wacc - g) / (1 + wacc) ** periods[-1]
     return (pv + tv + net_cash) / shares
 
@@ -533,99 +659,208 @@ WC_LIABS = (21, 22, 23, 30)       # payables, other current, deferred revenue, o
 BS_ASSETS = (5, 6, 7, 8, 9, 10, 14, 15, 16)
 BS_LIABS_EQUITY = (21, 22, 23, 24, 25, 29, 30, 35, 36, 37)
 
+# Forecast columns. IS, CFS and Assumptions hold FY2026E to FY2029E in G to J.
+# The balance sheet starts one column later (H to K), so the prior year's balance
+# sheet column is G to J. The DCF tab holds the same four years in B to E.
+FORECAST_YEARS = ["FY26E", "FY27E", "FY28E", "FY29E"]
+STATEMENT_COLUMNS = ["G", "H", "I", "J"]
+BS_COLUMNS = ["H", "I", "J", "K"]
+BS_PRIOR_COLUMNS = ["G", "H", "I", "J"]
+DCF_COLUMNS = ["B", "C", "D", "E"]
 
-def build_dcf_checks(wb):
-    """Rebuild working capital, the forecast balance sheet and the DCF from the statements."""
-    IS, BS, CFS = wb["IS"], wb["BS"], wb["CFS"]
-    A, D = wb["Assumptions"], wb["DCF"]
-    v = lambda ws, ref: ws[ref].value  # noqa: E731
+
+def cell_value(sheet, ref):
+    """The cached value of one cell, e.g. cell_value(wb["BS"], "H5")."""
+    return sheet[ref].value
+
+
+def check_dcf_labels(wb):
+    """Stop if an inserted row has moved any cell the DCF rebuild reads."""
     for (sheet, ref), want in EXPECTED_LABELS.items():
         got = str(wb[sheet][ref].value or "").strip()
         if not got.startswith(want):
             raise ValueError(f"{sheet}!{ref} is {got!r}, expected a label starting {want!r}")
 
-    stmt = "GHIJ"                      # FY2026E to FY2029E on IS, CFS and Assumptions
-    bs_cur, bs_prev = "HIJK", "GHIJ"   # the balance sheet starts one column later
-    years = ("FY26E", "FY27E", "FY28E", "FY29E")
-    checks = []
 
-    def one(label, derived, cell, tol=TOLERANCE, sheet=D):
-        return Check(f"DCF {label}", [derived], [v(sheet, cell)], ["DCF"], tol=tol)
+def single_value_check(label, derived, sheet, cell, tol=TOLERANCE):
+    """A check with one number: the rebuilt figure against one cell of the workbook."""
+    return Check(f"DCF {label}", [derived], [cell_value(sheet, cell)], ["DCF"], tol=tol)
 
-    # Working capital from the balance sheet, not from the cash flow statement.
-    dwc = []
-    for cur, prev in zip(bs_cur, bs_prev):
-        move = lambda r: v(BS, f"{cur}{r}") - v(BS, f"{prev}{r}")  # noqa: E731
-        dwc.append(-sum(move(r) for r in WC_ASSETS) + sum(move(r) for r in WC_LIABS))
-    checks.append(Check("DCF change in working capital = movement in the balance-sheet lines",
-                        dwc, [v(CFS, f"{c}13") for c in stmt], list(years)))
 
-    # The forecast balance sheet, re-added from its line items (no totals, no plug).
-    gap = [sum(v(BS, f"{c}{r}") for r in BS_ASSETS) - sum(v(BS, f"{c}{r}") for r in BS_LIABS_EQUITY)
-           for c in bs_cur]
-    checks.append(Check("DCF forecast balance sheet balances from its line items", gap,
-                        [0.0] * 4, list(years)))
-    checks.append(Check("DCF forecast cash = cash flow statement ending cash",
-                        [v(CFS, f"{c}30") for c in stmt], [v(BS, f"{c}5") for c in bs_cur], list(years)))
+def working_capital_change(bs):
+    """Change in working capital per forecast year, from the balance-sheet lines.
 
-    taxes = [v(A, f"{c}25") for c in stmt]
-    wacc_tax = v(A, "B50")
-    ke = v(A, "B45") + v(A, "B47") * v(A, "B46")
-    wacc = ke * (1 - v(A, "B52")) + v(A, "B49") * (1 - wacc_tax) * v(A, "B52")
-    g = v(A, "B55")
-    fcf = [v(IS, f"{c}28") * (1 - t) + v(CFS, f"{c}10") + v(CFS, f"{c}19") + w
-           for c, t, w in zip(stmt, taxes, dwc)]
-    val_date = v(A, "B60")
-    year_ends = [v(D, f"{c}14") for c in "BCDE"]
-    periods = [(ye - val_date).days / 365.25 for ye in year_ends]
-    pv = sum(f / (1 + wacc) ** t for f, t in zip(fcf, periods) if t > 0)
-    tv_pv = fcf[-1] * (1 + g) / (wacc - g) / (1 + wacc) ** periods[-1]
-    n = "H"                                                    # FY26E, the last year ended before valuation
-    debt = v(BS, f"{n}24") + v(BS, f"{n}25") + v(BS, f"{n}29")
-    net_cash = v(BS, f"{n}5") + v(BS, f"{n}6") + v(BS, f"{n}15") - debt
-    shares, price_ref = v(A, "B58"), v(A, "B59")
-    price = (pv + tv_pv + net_cash) / shares
-    df_last = 1 / (1 + wacc) ** periods[-1]
-    ebitda = v(IS, "J28") + v(CFS, "J10")
-    included = [y for y, t in zip(years, periods) if t > 0]
+    More assets tie up cash and more liabilities release it, so the asset
+    movement is subtracted and the liability movement is added.
+    """
+    changes = []
+    for i in range(len(BS_COLUMNS)):
+        this_col = BS_COLUMNS[i]
+        last_col = BS_PRIOR_COLUMNS[i]
 
-    checks += [
-        one("WACC = cost of equity x E/V + after-tax cost of debt x D/V", wacc, "B54", tol=1e-9, sheet=A),
-        *[one(f"unlevered free cash flow {y} = NOPAT at the scenario tax rate + D&A - CapEx - change in WC", f, f"{c}13")
-          for y, f, c in zip(years, fcf, "BCDE")],
-        *[one(f"years from valuation date to {y} year-end", t, f"{c}15", tol=1e-9)
-          for y, t, c in zip(years, periods, "BCDE")],
-        one(f"sum of discounted cash flows ({', '.join(included)})", pv, "B20"),
-        one("terminal value, discounted from the FY29E year-end", tv_pv, "B21"),
-        one("enterprise value", pv + tv_pv, "B22"),
-        one("net cash (FY26E) = cash + marketable securities - total debt", net_cash, "B23"),
-        one("implied share price", price, "B26", tol=0.01),
-        one("upside = implied price / reference price - 1", price / price_ref - 1, "B28", tol=1e-6),
-        one("sensitivity grid centre equals the headline price", price, "D36", tol=0.01),
-        one("grid corner, WACC +50 bps and g -50 bps",
-            _dcf_price(fcf, periods, wacc + 0.005, g - 0.005, net_cash, shares), "C37", tol=0.01),
-        one("grid corner, WACC -50 bps and g +50 bps",
-            _dcf_price(fcf, periods, wacc - 0.005, g + 0.005, net_cash, shares), "E35", tol=0.01),
-        one("P/E bar (mid multiple x FY29E diluted EPS, discounted)",
-            v(IS, "J43") * v(A, "C97") * df_last, "C69", tol=0.01),
-        one("EV/EBITDA bar (mid multiple x FY29E EBITDA, discounted, plus net cash)",
-            (ebitda * v(A, "C98") * df_last + net_cash) / shares, "C70", tol=0.01),
-    ]
+        asset_movement = 0
+        for row in WC_ASSETS:
+            asset_movement += cell_value(bs, f"{this_col}{row}") - cell_value(bs, f"{last_col}{row}")
 
-    lo, hi = g + 1e-6, 0.5
-    f_lo, f_hi = (_dcf_price(fcf, periods, x, g, net_cash, shares) for x in (lo, hi))
-    if not f_lo > price_ref > f_hi:
+        liability_movement = 0
+        for row in WC_LIABS:
+            liability_movement += cell_value(bs, f"{this_col}{row}") - cell_value(bs, f"{last_col}{row}")
+
+        changes.append(-asset_movement + liability_movement)
+    return changes
+
+
+def solve_implied_wacc(fcf, periods, growth, net_cash, shares, price_ref):
+    """The WACC at which the DCF price equals the reference price, found by bisection.
+
+    A higher WACC gives a lower price, so the answer sits between the lowest
+    WACC the formula allows (just above g) and 50%.
+    """
+    low = growth + 1e-6
+    high = 0.5
+    price_at_low = _dcf_price(fcf, periods, low, growth, net_cash, shares)
+    price_at_high = _dcf_price(fcf, periods, high, growth, net_cash, shares)
+    if not price_at_low > price_ref > price_at_high:
         raise ValueError("the reference price is outside the range the reverse DCF can solve for")
     for _ in range(200):
-        mid = (lo + hi) / 2
-        if _dcf_price(fcf, periods, mid, g, net_cash, shares) > price_ref:
-            lo = mid
+        middle = (low + high) / 2
+        if _dcf_price(fcf, periods, middle, growth, net_cash, shares) > price_ref:
+            low = middle
         else:
-            hi = mid
-    info = {"price": price, "price_ref": price_ref, "wacc": wacc, "g": g, "implied_wacc": (lo + hi) / 2,
-            "tv_share": tv_pv / (pv + tv_pv), "scenario": v(A, "B62"), "ev": pv + tv_pv,
-            "net_cash": net_cash, "equity_value": pv + tv_pv + net_cash, "market_value": price_ref * shares,
-            "bear": v(D, "B68"), "bull": v(D, "D68")}
+            high = middle
+    return (low + high) / 2
+
+
+def build_dcf_checks(wb):
+    """Rebuild working capital, the forecast balance sheet and the DCF from the statements."""
+    IS, BS, CFS = wb["IS"], wb["BS"], wb["CFS"]
+    A, D = wb["Assumptions"], wb["DCF"]
+    check_dcf_labels(wb)
+
+    checks = []
+
+    # ---- working capital from the balance sheet, not from the cash flow statement
+    wc_change = working_capital_change(BS)
+    workbook_wc_change = [cell_value(CFS, f"{col}13") for col in STATEMENT_COLUMNS]
+    checks.append(Check("DCF change in working capital = movement in the balance-sheet lines",
+                        wc_change, workbook_wc_change, FORECAST_YEARS))
+
+    # ---- the forecast balance sheet, re-added from its line items (no totals, no plug)
+    gaps = []
+    for col in BS_COLUMNS:
+        assets = sum(cell_value(BS, f"{col}{row}") for row in BS_ASSETS)
+        liabilities_and_equity = sum(cell_value(BS, f"{col}{row}") for row in BS_LIABS_EQUITY)
+        gaps.append(assets - liabilities_and_equity)
+    checks.append(Check("DCF forecast balance sheet balances from its line items",
+                        gaps, [0.0] * 4, FORECAST_YEARS))
+
+    cfs_ending_cash = [cell_value(CFS, f"{col}30") for col in STATEMENT_COLUMNS]
+    bs_cash = [cell_value(BS, f"{col}5") for col in BS_COLUMNS]
+    checks.append(Check("DCF forecast cash = cash flow statement ending cash",
+                        cfs_ending_cash, bs_cash, FORECAST_YEARS))
+
+    # ---- WACC from the Assumptions tab inputs
+    cost_of_equity = (cell_value(A, RISK_FREE_RATE)
+                      + cell_value(A, BETA) * cell_value(A, EQUITY_RISK_PREMIUM))
+    debt_weight = cell_value(A, TARGET_DEBT_TO_CAPITAL)
+    after_tax_cost_of_debt = cell_value(A, PRE_TAX_COST_OF_DEBT) * (1 - cell_value(A, WACC_TAX_RATE))
+    wacc = cost_of_equity * (1 - debt_weight) + after_tax_cost_of_debt * debt_weight
+    growth = cell_value(A, TERMINAL_GROWTH)
+
+    # ---- unlevered free cash flow: NOPAT + D&A - CapEx - change in working capital
+    # CFS capex is negative, and the working-capital change rebuilt above from the
+    # balance sheet is already in cash-flow sign (more assets is negative), so both
+    # are added.
+    fcf = []
+    for i in range(len(STATEMENT_COLUMNS)):
+        col = STATEMENT_COLUMNS[i]
+        tax_rate = cell_value(A, f"{col}25")
+        nopat = cell_value(IS, f"{col}28") * (1 - tax_rate)
+        fcf.append(nopat + cell_value(CFS, f"{col}10") + cell_value(CFS, f"{col}19") + wc_change[i])
+
+    # ---- discounting from the valuation date to each fiscal year-end
+    valuation_date = cell_value(A, VALUATION_DATE)
+    periods = []
+    for col in DCF_COLUMNS:
+        year_end = cell_value(D, f"{col}14")
+        periods.append((year_end - valuation_date).days / 365.25)
+
+    pv_of_cash_flows = 0
+    for cash_flow, t in zip(fcf, periods):
+        if t > 0:  # a year that ended before the valuation date is already in net cash
+            pv_of_cash_flows += cash_flow / (1 + wacc) ** t
+    pv_of_terminal = fcf[-1] * (1 + growth) / (wacc - growth) / (1 + wacc) ** periods[-1]
+
+    # ---- net cash at FY26E, the last balance sheet that closed before the valuation date
+    last_closed = BS_COLUMNS[0]            # column H
+    total_debt = (cell_value(BS, f"{last_closed}24") + cell_value(BS, f"{last_closed}25")
+                  + cell_value(BS, f"{last_closed}29"))
+    net_cash = (cell_value(BS, f"{last_closed}5") + cell_value(BS, f"{last_closed}6")
+                + cell_value(BS, f"{last_closed}15") - total_debt)
+
+    shares = cell_value(A, DILUTED_SHARES)
+    price_ref = cell_value(A, REFERENCE_PRICE)
+    enterprise_value = pv_of_cash_flows + pv_of_terminal
+    price = _dcf_price(fcf, periods, wacc, growth, net_cash, shares)
+    discount_factor_last = 1 / (1 + wacc) ** periods[-1]
+    final_year_col = STATEMENT_COLUMNS[-1]                     # column J, FY29E
+    ebitda_fy29 = cell_value(IS, f"{final_year_col}28") + cell_value(CFS, f"{final_year_col}10")
+
+    years_included = []
+    for year, t in zip(FORECAST_YEARS, periods):
+        if t > 0:
+            years_included.append(year)
+
+    # ---- compare each rebuilt figure with the DCF tab
+    checks.append(single_value_check(
+        "WACC = cost of equity x E/V + after-tax cost of debt x D/V", wacc, A, WACC_CELL, tol=1e-9))
+
+    for i in range(len(FORECAST_YEARS)):
+        checks.append(single_value_check(
+            f"unlevered free cash flow {FORECAST_YEARS[i]} = NOPAT at the scenario tax rate + D&A - CapEx - change in WC",
+            fcf[i], D, f"{DCF_COLUMNS[i]}13"))
+
+    for i in range(len(FORECAST_YEARS)):
+        checks.append(single_value_check(
+            f"years from valuation date to {FORECAST_YEARS[i]} year-end",
+            periods[i], D, f"{DCF_COLUMNS[i]}15", tol=1e-9))
+
+    checks.append(single_value_check(
+        f"sum of discounted cash flows ({', '.join(years_included)})", pv_of_cash_flows, D, "B20"))
+    checks.append(single_value_check(
+        "terminal value, discounted from the FY29E year-end", pv_of_terminal, D, "B21"))
+    checks.append(single_value_check("enterprise value", enterprise_value, D, "B22"))
+    checks.append(single_value_check(
+        "net cash (FY26E) = cash + marketable securities - total debt", net_cash, D, "B23"))
+    checks.append(single_value_check("implied share price", price, D, "B26", tol=0.01))
+    checks.append(single_value_check(
+        "upside = implied price / reference price - 1", price / price_ref - 1, D, "B28", tol=1e-6))
+    checks.append(single_value_check(
+        "sensitivity grid centre equals the headline price", price, D, "D36", tol=0.01))
+
+    corner_wacc_up = _dcf_price(fcf, periods, wacc + 0.005, growth - 0.005, net_cash, shares)
+    checks.append(single_value_check(
+        "grid corner, WACC +50 bps and g -50 bps", corner_wacc_up, D, "C37", tol=0.01))
+    corner_wacc_down = _dcf_price(fcf, periods, wacc - 0.005, growth + 0.005, net_cash, shares)
+    checks.append(single_value_check(
+        "grid corner, WACC -50 bps and g +50 bps", corner_wacc_down, D, "E35", tol=0.01))
+
+    pe_bar = cell_value(IS, f"{final_year_col}43") * cell_value(A, PE_MID_MULTIPLE) * discount_factor_last
+    checks.append(single_value_check(
+        "P/E bar (mid multiple x FY29E diluted EPS, discounted)", pe_bar, D, "C69", tol=0.01))
+    ev_ebitda_bar = (ebitda_fy29 * cell_value(A, EV_EBITDA_MID_MULTIPLE) * discount_factor_last + net_cash) / shares
+    checks.append(single_value_check(
+        "EV/EBITDA bar (mid multiple x FY29E EBITDA, discounted, plus net cash)",
+        ev_ebitda_bar, D, "C70", tol=0.01))
+
+    # ---- the summary figures printed at the end of the report
+    implied_wacc = solve_implied_wacc(fcf, periods, growth, net_cash, shares, price_ref)
+    info = {"price": price, "price_ref": price_ref, "wacc": wacc, "g": growth,
+            "implied_wacc": implied_wacc, "tv_share": pv_of_terminal / enterprise_value,
+            "scenario": cell_value(A, ACTIVE_SCENARIO), "ev": enterprise_value,
+            "net_cash": net_cash, "equity_value": enterprise_value + net_cash,
+            "market_value": price_ref * shares,
+            "bear": cell_value(D, "B68"), "bull": cell_value(D, "D68")}
     return checks, info
 
 

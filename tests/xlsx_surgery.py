@@ -42,7 +42,7 @@ def _sheet_part(zf: zipfile.ZipFile, sheet_name: str) -> str:
     rels = zf.read("xl/_rels/workbook.xml.rels").decode("utf-8")
     rel = re.search(rf'<Relationship[^>]*Id="{rid.group(1)}"[^>]*/>', rels)
     target = re.search(r'Target="([^"]+)"', rel.group(0)).group(1)
-    return "xl/" + target.lstrip("/").replace("worksheets/", "worksheets/", 1)
+    return "xl/" + target.lstrip("/")
 
 
 def set_cached_value(path: Path, sheet: str, cell_ref: str, value, *, as_error: bool = False):
@@ -59,7 +59,8 @@ def set_cached_value(path: Path, sheet: str, cell_ref: str, value, *, as_error: 
     if not m:
         raise KeyError(f"cell {cell_ref} not found on sheet {sheet!r}")
 
-    attrs, _, body = m.group(1), m.group(2), m.group(3) or ""
+    attrs = m.group(1)
+    body = m.group(3) or ""
     previous = None
     vm = re.search(r"<v>(.*?)</v>", body, re.DOTALL)
     if vm:
