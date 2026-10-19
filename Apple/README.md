@@ -66,7 +66,7 @@ The link to the filings is carried by the Source column's page citations; the fi
 - One assumptions sheet drives every tab; inputs are blue, calculations black and cross-sheet links green.
 - Scenario drivers are chosen with `CHOOSE(MATCH(Scenario, ...))`, so switching `B62` restates the forecast,
   statements and valuation together.
-- No macros, external links or add-ins; the file opens in Excel or LibreOffice Calc.
+- No macros, external links or add-ins; built and checked in Excel.
 
 ## Notes
 

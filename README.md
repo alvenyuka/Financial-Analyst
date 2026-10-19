@@ -1,191 +1,114 @@
-# Apple Valuation, Independently Checked
+# Apple Valuation Model
 
-The DCF gives $139.50 a share against a $338.40 price; a separate program rebuilds every figure.
-
-| At a glance | |
-|---|---|
-| **Who decides** | An investment or credit committee that needs a value it can defend. |
-| **Result** | Base case $139.50 a share against a $338.40 price: the price implies about a 5.3% return on Apple's cash flows, against a 9.3% cost of capital. |
-| **Proof** | Five years of SEC 10-K filings; a Python validator reconciles 20 of 20 accounting identities, 56 of 56 line items and 23 of 23 valuation figures; 20 tests, 14 of them injecting a fault. |
+An Excel model that estimates what Apple's shares are worth from its own annual reports, plus a Python program that checks the workbook's arithmetic from outside Excel.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Excel](https://img.shields.io/badge/Excel-LibreOffice%20compatible-217346?logo=microsoftexcel&logoColor=white)](https://www.microsoft.com/en-us/microsoft-365/excel)
 [![models validated](https://github.com/alvenyuka/Financial-Analyst/actions/workflows/ci.yml/badge.svg)](https://github.com/alvenyuka/Financial-Analyst/actions/workflows/ci.yml)
 
-![Apple valuation range by method: DCF $123 to $162 against a share price of $338.40](images/apple_football_field.png)
+![Table of valuation ranges per share by method. The main DCF runs from $123.00 to $161.64 with a mid-point of $139.50, against a current share price of $338.40](images/apple_football_field.png)
 
-## The problem
+## What this project does
 
-An investment or credit committee looking at a large listed company needs two things from a model: a value it
-can defend, and the assumption that would have to change for the market price to be right. A spreadsheet that
-reports "all checks pass" is computed by the same formulas it is meant to check, so the committee also needs
-proof from outside the workbook. The question: **what are Apple's shares worth on its own filings, and what
-does the market price imply?**
+Someone deciding whether a share price is reasonable (an investor, or a credit committee lending to the company) needs a value they can defend and the assumptions behind it. A spreadsheet that reports "all checks pass" is no proof on its own: the tick is computed by the same formulas it is meant to check. A wrong formula shows a tick just as confidently as a right one.
 
-## How it works
+So this project does two things. It builds a model of Apple, and it checks that model with a separate Python program that does not rely on the workbook's own formulas. The question it answers: **what are Apple's shares worth on its own filings, and what would have to be true for the market price to be right?**
 
-```mermaid
-flowchart LR
-    A[SEC 10-K filings] --> B[IS, BS, CFS FY21-FY25]
-    B --> C[Scenario drivers: Bear, Base, Bull]
-    C --> D[Forecast FY26-FY29]
-    D --> E[Unlevered FCF, WACC]
-    E --> F[DCF, reverse DCF, football field]
-    B --> G[validate_model.py]
-    F --> G
-```
-
-1. **Historicals.** Transcribed from the 10-K filings and press releases, each line cited to a page. The filings
-   for fiscal 2023 onward are in `Apple/Source_filings/`; fiscal 2021 and 2022 cite the fiscal 2022 and 2023
-   10-Ks.
-2. **Forecast** to fiscal 2029 from segment revenue growth and gross margins, operating-expense growth,
-   working-capital days and capital returns, with no balancing plug: cash comes from the cash flow statement.
-   One cell switches every driver between Bear, Base and Bull (`CHOOSE(MATCH(...))`).
-3. **Inputs in one place.** Every assumption sits on the Assumptions sheet, in blue.
-4. **Valuation.** Unlevered free cash flow is discounted at a CAPM-based WACC (cost of equity 10.0% at beta 1.1,
-   after-tax cost of debt 3.4%, 90/10 weights) from the 28 Sep 2026 valuation date to each fiscal year-end, with
-   a Gordon terminal value at the FY2029 year-end, two sensitivity grids and a football field. The reverse DCF
-   solves for the discount rate at which the same cash flows justify the market price.
-5. **Independent check.** `validate_model.py` reads the raw cells and recomputes every identity, line item,
-   ratio and valuation figure outside Excel.
-
-## Stack
-
-| Layer | Tool | Version |
-|---|---|---|
-| Model | Excel workbook, no macros or add-ins; opens in LibreOffice Calc | |
-| Validator | Python, openpyxl (reads cached formula results) | openpyxl 3.1 or later |
-| Tests and CI | pytest with fault injection, GitHub Actions | Python 3.13 in CI |
+Data: Apple's annual reports (10-K filings) from the US Securities and Exchange Commission, fiscal 2021 to 2025, plus Apple investor-relations press releases for sales by segment. The market price is $338.40, the close on 28 Sep 2026.
 
 ## Results
 
-A three-statement model and DCF of Apple, built in Excel from five years of SEC 10-K filings and rebuilt line by line by a separate Python validator. The model values the shares at $139.50 against a market price of $338.40; to justify that price, investors must accept about a 5.3% return on Apple's cash flows, against the 9.3% a standard cost-of-capital estimate gives. The validator reconciles 20 of 20 accounting identities, 56 of 56 transcribed line items and 23 of 23 valuation figures, and 20 tests, 14 of them injecting a fault, prove it catches errors.
+- The model values Apple at **$139.50 a share** in its Base case, against the market price of $338.40. The Bear and Bull cases give $75.86 and $265.54. Even the Bull case is below the market price.
+- The market price only works if investors accept a return of about **5.30% a year** on Apple's forecast cash flows. The model's cost of capital is 9.34%. This is the "reverse" calculation: instead of asking what the shares are worth, it asks what discount rate makes the same cash flows worth $338.40.
+- The validator re-derived every check it runs and all of them matched, apart from one explained difference (see Limits). It exits cleanly, and the test suite passes (20 tests).
 
-- Five fiscal years of income statement, balance sheet and cash flow statement (FY2021 to FY2025), four
-  forecast years, three scenarios.
-- 20 tests pass; 14 of them break a copy of the model one cell at a time and prove the fault is caught.
-
-| Apple, Base scenario | Value |
+| Apple, Base case | Value |
 |---|---:|
-| Enterprise value | $2.05tn |
-| DCF implied share price | **$139.50** |
-| Bear / Bull implied price | $75.86 / $265.54 |
-| Terminal value share of enterprise value | 83% |
+| Enterprise value (value of the whole business) | $2.05tn |
+| Net cash at the end of fiscal 2026 | $41.4bn |
+| Equity value (what belongs to shareholders) | $2.09tn |
+| Value per share | **$139.50** |
+| Market value at $338.40 a share | $5.08tn |
+| Gap between market value and the Base case | $2.98tn |
+| Share of the value that comes from the terminal value | 83% |
+| Bear / Bull value per share (recorded in the workbook, not re-derived) | $75.86 / $265.54 |
 
-| Check (Apple, Base scenario) | Result |
+| What the validator checked | Result |
 |---|---:|
-| Accounting identities reconciled | 20 of 20 |
-| Transcribed line items traced to source cells | 56 of 56 |
-| Valuation figures rebuilt independently | 23 of 23 |
+| Accounting identities re-added outside Excel | 20 of 20 |
+| Historical line items traced back to the statement cell they were copied from | 56 of 56 |
+| Valuation figures rebuilt from the forecast statements and inputs | 23 of 23 |
 | Ratios rebuilt from the traced line items, every year | 19 of 19 |
 
-## Business impact
+The figures above are printed by `python validate_model.py`. The terminal value is the value placed on all cash flows after the forecast ends, so with 83% of the value resting on it, the discount rate matters more than any single forecast year.
 
-At $338.40 the market prices Apple far above what its forecast cash flows support at a standard cost of capital
-(all figures printed by `validate_model.py`):
+## How I built it
 
-| Measure | Value |
-|---|---:|
-| Equity value, Base DCF | $2.09tn |
-| Market value at $338.40 (15.0bn diluted shares) | $5.08tn |
-| Premium the market pays over the Base case | **$2.98tn** |
-| Discount rate the market price implies | **5.30%**, against 9.34% |
-| Bull-case price against market | $265.54, 22% below |
+1. **Copy the historical statements from the filings.** The workbook, `Apple/Apple_Financial_Model.xlsx`, holds three statements for fiscal 2021 to 2025: the **income statement** (sales and profit over a year), the **balance sheet** (what Apple owns and owes on one day) and the **cash flow statement** (where cash came from and went). Each historical line cites the 10-K page it came from. `Apple/Source_filings/` holds the fiscal 2023 to 2025 fourth-quarter statements and the fiscal 2025 10-K.
+2. **Put every assumption on one sheet.** The Assumptions sheet holds the forecast drivers (segment growth, margins, working-capital days, capital returns, the cost-of-capital inputs). Inputs are blue, calculations black. One cell, `B62`, switches the whole model between Bear, Base and Bull.
+3. **Forecast fiscal 2026 to 2029.** Revenue grows by product line and Services, margins follow the trends in the filings, and cash comes out of the cash flow statement. There is no balancing plug: the balance sheet balances only because the three statements agree with each other.
+4. **Value the forecast with a DCF.** A **discounted cash flow (DCF)** adds up future cash, each year shrunk by a discount rate because cash later is worth less than cash now. The cash used is **unlevered free cash flow**, which is cash generated by the business before paying lenders. The discount rate is the **WACC** (weighted average cost of capital), the blended return that shareholders and lenders require: 9.34% here, from a 10.0% cost of equity, a 3.4% after-tax cost of debt and 90/10 weights. After the last forecast year, a **terminal value** assumes cash flow grows 2.5% a year forever. Cash is discounted from the 28 Sep 2026 valuation date. These are on the DCF sheet.
+5. **Show the range.** The DCF sheet also has two sensitivity grids (value per share as the discount rate and growth change) and a football field, a table that sets the DCF range beside multiples-based values, the 52-week price range and analyst targets.
+6. **Solve the reverse DCF.** `validate_model.py` finds the discount rate at which the same cash flows give $338.40. That is the 5.30% above.
+7. **Write the validator.** `validate_model.py` reads the workbook's saved values and recomputes outside Excel. It does four things. It re-adds every **accounting identity**, a rule that must always hold (for example assets equal liabilities plus equity, or gross profit equals revenue minus cost of sales). It checks that each line on the Validation tab matches the statement cell it was copied from. It rebuilds the valuation. It rebuilds the ratios from the traced line items.
+8. **Test the validator by breaking the model.** `tests/test_validate_model.py` runs a **fault-injection test** 14 times: it copies the workbook, damages one thing (a total that no longer adds up, a terminal value discounted one year too many, a cash flow reading the wrong year's balance sheet, a ratio on the wrong denominator and so on) and asserts that the validator fails. A checker that has only ever seen a correct file proves little, so this shows it can catch errors. The other 6 tests check the clean run and error handling.
 
-At a 9.34% cost of capital the market price cannot be reached even in the Bull case. It is consistent with
-investors accepting about a 5.3% return on Apple's cash flows, or with growth well above every scenario here.
-For a committee, the useful output is not the $139.50 itself but which assumption would have to change to reach
-the market price.
+![DCF sheet showing the free cash flow build, discounting and valuation summary](images/apple_dcf.png)
 
-## Charts
+*The DCF sheet. FY2026 ended on 26 Sep 2026, before the valuation date, so its cash is counted in net cash instead of being discounted.*
 
-![Apple DCF: free cash flow build, discounting and valuation summary](images/apple_dcf.png)
+![Validation tab with each income-statement line for FY21 to FY25 ticked against the 10-K page it came from](images/apple_validation.png)
 
-*The DCF sheet: FY2026 ended two days before the valuation date, so its cash is counted in net cash rather than
-discounted.*
+*The Validation tab: each historical line is tied to the filing page it came from.*
 
-![Apple income statement, FY2021 actuals to FY2029 forecast, with inputs in blue](images/apple_income_statement.png)
+## Problems I hit
 
-*Products gross margin is held at its fiscal 2024-2025 average of 37%, while Services sits at 76% on a trend
-rising about 1.4 points a year: Services margins drive the forecast.*
-
-![Validation tab: each historical income-statement line for FY21 to FY25 ticked against the 10-K page it came from](images/apple_validation.png)
-
-*Every historical line ticked against the 10-K page it came from.*
+- **The first validator passed a model whose statements were all 1s.** It added up the Validation tab's own copy of the numbers, which proved that copy was consistent and proved nothing about the real statements. The code records that with every numeric cell on the income statement and balance sheet replaced by the number 1, it still printed "19 of 19 matched". The fix was the transcription check: it reads the statement cells directly and compares them with the Validation tab, row by row and year by year.
+- **An independent review found four errors the workbook and the validator had both missed.** The cash flow statement read each forecast year's working-capital and debt movements from the year before. "Net cash" used the wrong year. Nine fiscal 2025 balance-sheet lines did not match the 10-K even though their totals did. A balance-sheet line was acting as a plug, so the balance check could not fail. The validator had reused some of the workbook's own cell references, which is why it agreed with the errors. All four are fixed, the validator now rebuilds these figures from the balance sheet itself, and the value per share moved from $135.98 to $139.50 (`docs/METHODOLOGY.md`, Review history).
+- **An older workbook discounted the terminal value one period too many.** It reported $240.05 on the Bull case against an undated $232.50. The DCF is now rebuilt from the valuation date, and one fault-injection test puts this error back and checks it is caught.
+- **The test helper could not save the workbook with openpyxl.** Saving with openpyxl discards every saved formula result, so tests that damaged one cell failed for the wrong reason. `tests/xlsx_surgery.py` instead edits a single cached value inside the .xlsx file and leaves everything else alone.
 
 ## Data
 
-| Source | Link | Terms | Coverage | Date |
-|---|---|---|---|---|
-| Apple 10-K filings | SEC EDGAR, CIK 0000320193 | public filings | income statement, balance sheet, cash flow statement | fiscal 2021 to 2025 |
-| Apple investor relations | press releases | public | segment revenue and gross margin (Products, Services) | fiscal 2021 to 2025 |
-| Market data | | | close of $338.40; 52-week range $245.27 to $341.07 | 28 Sep 2026 |
-| Analyst targets | stockanalysis.com | public page | 44 analysts, low $215, median $340, high $405 | 29 Sep 2026 |
-
-## Key design decisions
-
-- **Checked from outside the workbook.** The validator recomputes from raw cells rather than trusting the
-  Validation tab. It has already paid for itself: an independent review found the cash flow statement reading
-  each forecast year's working-capital movement from the year before, and net cash taken from the wrong year,
-  while the workbook's own checks showed all green. Both are fixed, and the validator now rebuilds those
-  figures from the balance sheet itself ([review history](docs/METHODOLOGY.md#review-history)).
-- **Ratios rebuilt from traced line items.** Margins, growth, returns, debt ratios and cash conversion are
-  recomputed from the same line items the filings were traced to, so a ratio pointing at the wrong cell fails.
-- **No balancing plug.** Cash comes from the cash flow statement, so the balance sheet balances only if the
-  three statements agree.
-- **A reverse DCF alongside the DCF.** The terminal value is 83% of enterprise value, so the discount rate
-  carries the valuation: a half-point change in WACC moves the price more than any forecast-year assumption.
-  Solving for the rate the market implies makes that dependence explicit.
-- **One scenario switch.** A single cell drives every assumption between Bear, Base and Bull, so scenarios
-  cannot drift apart.
+| Source | Terms | Coverage | Date |
+|---|---|---|---|
+| Apple 10-K filings, SEC EDGAR (CIK 0000320193) | public filings | income statement, balance sheet, cash flow statement | fiscal 2021 to 2025 |
+| Apple investor relations press releases | public | sales and gross margin for Products and Services | fiscal 2021 to 2025 |
+| Share price | Excel STOCKHISTORY | close of $338.40; 52-week range $245.27 to $341.07 | 28 Sep 2026 |
+| Analyst targets, stockanalysis.com | public page | 44 analysts, low $215, median $340, high $405 | 29 Sep 2026 |
 
 ## Limits
 
-- **Bear and Bull are recorded values**, saved with each scenario active; switching `B62` recalculates them.
-- **Forecast drivers are assumptions.** The tax rate is the fiscal 2021-2025 average excluding fiscal 2024's
-  one-off EU State Aid charge; the sanity bands on forecasts are wide, so passing them is a weak test.
-- **One company.** Safaricom and Equity Group, both listed in Nairobi, are the next models.
-- **The fiscal 2026 first-quarter statements** are in `Source_filings/` but not yet used.
-
-## Project structure
-
-The model's tabs and assumptions are described in [`Apple/README.md`](Apple/README.md) and the full method
-in [`docs/METHODOLOGY.md`](docs/METHODOLOGY.md).
-
-
-```
-Apple/Apple_Financial_Model.xlsx   the model: assumptions, statements, DCF, validation tab
-Apple/Source_filings/              the 10-K and press-release PDFs behind the historicals
-Apple/README.md                    model-specific assumptions and tabs
-validate_model.py                  independent validator (statements, ratios, valuation, reverse DCF)
-tests/                             fault-injection tests for the validator
-images/                            screenshots of the model
-docs/METHODOLOGY.md                full method and the review history
-```
+- **One company, one set of assumptions.** The forecast drivers (growth, margins, tax rate, beta, terminal growth) are my judgement from the filings. The wide sanity bands on forecasts mean passing them is a weak test.
+- **Bear and Bull values are recorded, not re-derived.** They were saved with each scenario active. Switching `B62` recalculates them, but the validator prints them as recorded. It also does not cover the Dashboard or Pivots tabs.
+- **One flagged difference remains.** For fiscal 2021 to 2023, ending cash on the cash flow statement differs from balance-sheet cash by 989, 1,331 and 772 million dollars, because Apple's cash flow statement then included restricted cash. The validator reports it as advisory, not as an error.
+- **The terminal value is 83% of the answer.** A small change in the discount rate or growth rate moves the price a lot.
+- **Not tested in LibreOffice.** The workbook has not been opened or tested in LibreOffice, so I make no claim that it works there. The validator reads the values saved in the file.
+- **Fiscal 2026 first-quarter statements** are in `Source_filings/` but not used.
 
 ## How to run
 
+Needs Python 3 with `openpyxl` (and `pytest` for the tests), as listed in `requirements.txt`. To explore the model, open `Apple/Apple_Financial_Model.xlsx` in Excel and change the scenario in cell `B62` of the Assumptions sheet.
+
 ```bash
 pip install -r requirements.txt
-python validate_model.py      # rebuild the statements and the valuation, report the implied WACC
-python -m pytest              # prove the validator catches injected faults
+python validate_model.py    # rebuilds the checks and prints the results above
+python -m pytest            # 20 tests; takes a few minutes
 ```
 
-Or open `Apple/Apple_Financial_Model.xlsx` in Excel or LibreOffice Calc and change the scenario in cell `B62` of
-the Assumptions sheet.
+## Project structure
 
-## Skills demonstrated
-
-- Three-statement modelling from 10-K filings with no plug: `Apple/Apple_Financial_Model.xlsx`
-- DCF with CAPM-based WACC, Gordon terminal value, sensitivity grids and a football field: the DCF sheet
-- Reverse DCF to read the market's implied discount rate: `validate_model.py`
-- Scenario modelling with one switch cell: the Assumptions sheet
-- Independent model validation and fault-injection testing: `validate_model.py`, `tests/`
-- Source tracing of every historical line to a filing page: the Validation tab
+```
+Apple/Apple_Financial_Model.xlsx   the model: assumptions, statements, ratios, DCF, validation tab
+Apple/Source_filings/              the 10-K and quarterly statement PDFs behind the historicals
+Apple/README.md                    tabs and key assumptions of the model
+validate_model.py                  the independent validator
+tests/                             fault-injection tests and the xlsx editing helper
+images/                            screenshots of the model
+docs/METHODOLOGY.md                full method and review history
+```
 
 ## License
 
-MIT. See [`LICENSE`](LICENSE). Sources: SEC EDGAR filings (CIK 0000320193), Apple investor relations, and
-stockanalysis.com for the analyst range.
+MIT. See [`LICENSE`](LICENSE). Sources: SEC EDGAR filings (CIK 0000320193), Apple investor relations, and stockanalysis.com for the analyst range.
 
 Alven Yuka · [LinkedIn](https://www.linkedin.com/in/alven-yuka-610b78174/) · [Email](mailto:alvenyuka2@gmail.com)

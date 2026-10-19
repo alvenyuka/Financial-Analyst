@@ -81,7 +81,7 @@ The validator is itself tested. `tests/` copies the real model, breaks one thing
 caught: a total that no longer adds up, a duplicate row label, mismatched year headers, a statement that no
 longer matches its transcription, a mis-discounted terminal value, a wrong price, undiscounted multiples, a cash
 flow that reads the wrong balance-sheet year, a forecast balance sheet that does not balance, and net cash from
-the wrong year. CI runs those 17 tests first and the real model second.
+the wrong year. CI runs the 20 tests first and the real model second.
 
 ## Review history
 
